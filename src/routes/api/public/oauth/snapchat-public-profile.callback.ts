@@ -28,7 +28,8 @@ export const Route = createFileRoute("/api/public/oauth/snapchat-public-profile/
         console.info("[SNAP_PP_OAUTH_CALLBACK] received");
 
         const providerError = url.searchParams.get("error");
-        if (providerError) {
+        const providerDescription = url.searchParams.get("error_description");
+        if (providerError || providerDescription) {
           return finish({
             snapchat_pp: "failed",
             reason: providerError === "access_denied" ? "access_denied" : "provider_error",
@@ -37,7 +38,13 @@ export const Route = createFileRoute("/api/public/oauth/snapchat-public-profile/
 
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
-        if (!code || !state) return finish({ snapchat_pp: "failed", reason: "invalid_callback" });
+        if (!code || !state) {
+          console.warn("[SNAP_PP_OAUTH_CALLBACK] missing parameters", {
+            hasCode: Boolean(code),
+            hasState: Boolean(state),
+          });
+          return finish({ snapchat_pp: "failed", reason: "invalid_callback" });
+        }
 
         const pending = await consumeOAuthState(state, "snapchat");
         if (!pending.ok) return finish({ snapchat_pp: "failed", reason: pending.reason });

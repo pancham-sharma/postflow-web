@@ -21,6 +21,7 @@ import { FacebookPagePicker } from "@/components/accounts/facebook-page-picker";
 import { SnapchatPublicProfileCard } from "@/components/accounts/snapchat-public-profile-card";
 import { cn } from "@/lib/utils";
 import { takeComposerReturn } from "@/lib/composer-draft";
+import { clientErrorMessage } from "@/lib/client-error-message";
 
 export const Route = createFileRoute("/_authenticated/app/accounts")({
   head: () => ({
@@ -176,9 +177,10 @@ function AccountsPage() {
     staleTime: 60_000,
   });
 
-  const { data: connections = [], isLoading } = useQuery<SocialConnection[]>({
+  const { data: connections = [], isLoading, error: connectionsError } = useQuery<SocialConnection[]>({
     queryKey: ["social-connections"],
     queryFn: () => fetchConnections(),
+    staleTime: 60_000,
   });
 
   // Surface the outcome of the OAuth round-trip handled by the callback route.
@@ -444,6 +446,22 @@ function AccountsPage() {
           platform's official authorization process, and tokens are encrypted before storage.
         </p>
       </div>
+
+      {connectionsError && (
+        <section className="rounded-2xl border border-destructive/50 p-4 text-sm" role="alert">
+          <h2 className="font-semibold">Social accounts could not be loaded</h2>
+          <p className="mt-1 text-muted-foreground">
+            {clientErrorMessage(connectionsError, "The account service is temporarily unavailable. Please try again shortly.")}
+          </p>
+          <button
+            type="button"
+            onClick={() => void queryClient.invalidateQueries({ queryKey: ["social-connections"] })}
+            className="mt-3 rounded-md border border-border px-3 py-1.5 text-xs font-semibold hover:bg-accent"
+          >
+            Try again
+          </button>
+        </section>
+      )}
 
       <SnapchatPublicProfileCard />
 

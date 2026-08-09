@@ -194,6 +194,7 @@ const ProfileMenu = memo(function ProfileMenu({
     queryKey: ["user-settings", "profile-menu"],
     queryFn: () => withAuthRecovery(() => fetchSettings(), null),
     staleTime: 60_000,
+    enabled: open,
   });
 
   useEffect(() => {

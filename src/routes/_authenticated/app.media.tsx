@@ -713,9 +713,19 @@ function MediaLibraryPage() {
               {!previewUrl ? (
                 <Loader2 className="size-5 animate-spin" aria-hidden />
               ) : open.mediaType === "video" ? (
-                <video src={previewUrl} controls className="h-full w-full object-contain" />
+                <video
+                  src={previewUrl}
+                  controls
+                  preload="metadata"
+                  className="h-full w-full object-contain"
+                />
               ) : (
-                <img src={previewUrl} alt={open.altText ?? open.fileName} className="h-full w-full object-contain" />
+                <img
+                  src={previewUrl}
+                  alt={open.altText ?? open.fileName}
+                  decoding="async"
+                  className="h-full w-full object-contain"
+                />
               )}
             </div>
 

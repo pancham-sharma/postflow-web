@@ -3,12 +3,12 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  GENERIC_SIGNUP_ERROR,
   MIN_PASSWORD_LENGTH,
   isDisposableEmail,
   normalizeEmail,
   passwordProblem,
 } from "@/lib/auth-policy";
+import { authUserMessage, logAuthFailure } from "@/lib/supabase-auth-errors";
 
 
 export const Route = createFileRoute("/register")({
@@ -64,9 +64,8 @@ function RegisterPage() {
     });
     setBusy(false);
     if (error) {
-      // Generic on purpose: never confirm whether an address is already registered.
-      console.error("[auth] sign-up failed", error.message);
-      toast.error(GENERIC_SIGNUP_ERROR);
+      logAuthFailure("password_signup", error);
+      toast.error(authUserMessage(error, "signup"));
       return;
     }
     if (data.session) {

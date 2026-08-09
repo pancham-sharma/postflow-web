@@ -12,6 +12,7 @@ let channelSequence = 0;
 export function useJobRealtime(queryKeys: string[][]) {
   const queryClient = useQueryClient();
   const [live, setLive] = useState(false);
+  const liveRef = useRef(false);
   const keySignature = JSON.stringify(queryKeys);
   const invalidateRef = useRef<() => void>(() => {});
 
@@ -48,7 +49,9 @@ export function useJobRealtime(queryKeys: string[][]) {
       .on("postgres_changes", { event: "*", schema: "public", table: "platform_controls" }, invalidate)
       .on("postgres_changes", { event: "*", schema: "public", table: "platform_health" }, invalidate)
       .subscribe((status) => {
-        setLive(status === "SUBSCRIBED");
+        const connected = status === "SUBSCRIBED";
+        liveRef.current = connected;
+        setLive(connected);
       });
 
     // Fallback + recovery: refresh when the tab regains focus, and poll slowly
@@ -58,13 +61,14 @@ export function useJobRealtime(queryKeys: string[][]) {
     };
     document.addEventListener("visibilitychange", onVisible);
     const poll = setInterval(() => {
-      if (document.visibilityState === "visible") invalidateRef.current();
+      if (!liveRef.current && document.visibilityState === "visible") invalidateRef.current();
     }, 15_000);
 
     return () => {
       if (frame) clearTimeout(frame);
       clearInterval(poll);
       document.removeEventListener("visibilitychange", onVisible);
+      liveRef.current = false;
       setLive(false);
       void supabase.removeChannel(channel);
     };

@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { startGoogleSignIn, rememberNext, takeNext } from "@/lib/auth-next";
 import { verifyAuthenticatedSessionWithFallback } from "@/lib/auth-session";
-import { GENERIC_LOGIN_ERROR, normalizeEmail } from "@/lib/auth-policy";
+import { normalizeEmail } from "@/lib/auth-policy";
+import { authUserMessage, logAuthFailure } from "@/lib/supabase-auth-errors";
 
 
 
@@ -116,16 +117,16 @@ function LoginPage() {
       password,
     });
     if (error) {
-      // One generic message for wrong password, unknown account and unconfirmed
-      // email, so the form can't be used to discover which addresses exist.
-      console.error("[auth] sign-in failed", error.message);
+      logAuthFailure("password_sign_in", error);
       setBusy(false);
-      toast.error(GENERIC_LOGIN_ERROR);
+      toast.error(authUserMessage(error, "login"));
       return;
     }
     const result = await forwardIfVerified({ announce: true });
     setBusy(false);
-    if (result === "failed") toast.error(GENERIC_LOGIN_ERROR);
+    if (result === "failed") {
+      toast.error("We could not verify your session. Please try signing in again.");
+    }
   }
 
   /** True when Supabase already holds a session — a sign-in that really worked. */

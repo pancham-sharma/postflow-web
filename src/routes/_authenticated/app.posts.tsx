@@ -131,17 +131,17 @@ function PostHistory() {
 
     void run();
     const timer = setInterval(() => void run(), 20_000);
-    // Live status while anything is in flight: refresh every 4s until every
-    // destination reaches a terminal state (published / failed / cancelled).
+    // Realtime normally delivers status changes. Poll quickly only while its
+    // websocket is unavailable and a destination is still in flight.
     const poll = setInterval(() => {
-      if (document.visibilityState === "visible") invalidate();
+      if (!live && document.visibilityState === "visible") invalidate();
     }, 4_000);
     return () => {
       cancelled = true;
       clearInterval(timer);
       clearInterval(poll);
     };
-  }, [pendingCount, kick, invalidate]);
+  }, [pendingCount, kick, invalidate, live]);
 
   const retryMutation = useMutation({
     mutationFn: async (input: string | { destinationId: string; originalAudioOnly?: boolean }) =>

@@ -54,6 +54,7 @@ export const generateSourceIdeaForPlatform = createServerFn({ method: "POST" })
         location: data.location,
       },
       data.platform,
+      context.userId,
     );
   });
 
@@ -64,11 +65,14 @@ export const analyzeSourceIdea = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     checkRateLimit(context.userId);
     const { analyzeSourceTitle } = await import("@/lib/source-idea.server");
-    return analyzeSourceTitle({
-      title: data.title,
-      language: data.language,
-      tone: data.tone,
-      targetAudience: data.target_audience,
-      location: data.location,
-    });
+    return analyzeSourceTitle(
+      {
+        title: data.title,
+        language: data.language,
+        tone: data.tone,
+        targetAudience: data.target_audience,
+        location: data.location,
+      },
+      context.userId,
+    );
   });

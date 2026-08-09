@@ -20,16 +20,37 @@ equivalent control in this runtime is listed instead.
 Required server-side variables:
 
 ```
-SOCIAL_TOKEN_ENCRYPTION_KEY
+OPENAI_API_KEY
+OPENAI_MODEL
+SOCIAL_TOKEN_ENC_KEY
+POSTFLOW_TOKEN_ENCRYPTION_KEY
 POSTFLOW_APP_URL
 META_OAUTH_CLIENT_ID / META_OAUTH_CLIENT_SECRET
 PINTEREST_OAUTH_CLIENT_ID / PINTEREST_OAUTH_CLIENT_SECRET
+INSTAGRAM_OAUTH_CLIENT_ID / INSTAGRAM_OAUTH_CLIENT_SECRET / INSTAGRAM_REDIRECT_URI
 SNAPCHAT_OAUTH_CLIENT_ID / SNAPCHAT_OAUTH_CLIENT_SECRET
 YOUTUBE_OAUTH_CLIENT_ID / YOUTUBE_OAUTH_CLIENT_SECRET
 ```
 
+OpenAI calls are made only from `src/lib/ai-provider.server.ts`. The browser
+never receives `OPENAI_API_KEY`; requests use non-reversible per-user safety
+identifiers and disable response storage. Logs contain only provider/status/error
+metadata, never prompts, model output, response bodies, or credential values.
+
+Run `npm run security:scan` to check the working tree. The repository also
+includes a staged-file pre-commit check and a full-history Gitleaks workflow.
+Enable the local hook once per clone with:
+
+```sh
+git config core.hooksPath .githooks
+```
+
 If a secret has ever been committed anywhere, rotate it at the provider
 dashboard — deleting the file is not sufficient.
+
+If `SOCIAL_TOKEN_ENC_KEY` must be replaced after encrypted provider tokens
+already exist, use a planned migration or require account reconnection. Blindly
+changing it makes existing encrypted tokens unreadable.
 
 ## 2. Backend-only OAuth
 

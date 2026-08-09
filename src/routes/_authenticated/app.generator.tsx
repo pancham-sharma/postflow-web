@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Sparkles, Wand2, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { inputCls } from "@/components/composer/post-details";
+import { inputCls } from "@/components/form-styles";
 import { GeneratorCard } from "@/components/generator/generator-card";
 import {
   GENERATOR_PLATFORMS,

@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { inputCls } from "@/components/composer/post-details";
+import { inputCls } from "@/components/form-styles";
 import { platformMap } from "@/lib/postflow-data";
 import { SOCIAL_PLATFORMS, type SocialPlatform } from "@/lib/social-platforms";
 import { registerUserTrack } from "@/lib/music.functions";

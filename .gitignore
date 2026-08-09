@@ -44,6 +44,12 @@ service-account*.json
 client_secret_*.json
 *googleusercontent*.json
 oauth-client*.json
+google-credentials*.json
+client_secret*.json
+firebase-service-account*.json
+credentials/
+secrets/
+private/
 
 # Keys & certificates
 *.pem
@@ -57,6 +63,12 @@ id_rsa*
 *.asc
 *.gpg
 
+# Database exports and backups
+*.dump
+*.backup
+*.bak
+*.sql.gz
+
 # Local tooling / caches
 .cache/
 .temp/
@@ -67,3 +79,8 @@ coverage/
 supabase/.temp/
 .bun/
 .turbo/
+build/
+__pycache__/
+.venv/
+venv/
+Thumbs.db

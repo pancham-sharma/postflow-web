@@ -425,20 +425,23 @@ Public Profile, YouTube resumable state, indexes).
 
 ## 12. AI features
 
-All AI runs through the **Lovable AI Gateway** (`src/lib/ai-gateway.server.ts`,
-OpenAI-compatible provider, Vercel AI SDK). No third-party AI key is needed —
-the managed `LOVABLE_API_KEY` is used server-side only.
+All AI runs through the server-only provider in `src/lib/ai-provider.server.ts`.
+`OPENAI_API_KEY` is the primary provider credential and `OPENAI_MODEL`
+selects the model (default: `gpt-5.6-terra`). The existing Lovable AI Gateway
+remains an optional fallback when `OPENAI_API_KEY` is not configured. Neither
+credential is exposed to browser code.
 
-| Feature                                                              | Where                                                            | Model                     |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------- |
-| Per-platform caption / hashtag writer ("Generate for all platforms") | `src/lib/ai-content.functions.ts`                                | `google/gemini-2.5-flash` |
-| Title generator                                                      | `src/lib/title-generator.functions.ts`                           | `google/gemini-3.6-flash` |
-| Source-idea generator (streaming)                                    | `src/lib/source-idea.server.ts` + `/api/ai/source-idea/generate` | `google/gemini-3.6-flash` |
-| Audio ducking suggestions                                            | `src/lib/audio-render.server.ts` (media processor)               | rules + processor         |
+| Feature                                                              | Where                                                            | Provider/model                    |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------- |
+| Per-platform caption / hashtag writer ("Generate for all platforms") | `src/lib/ai-content.functions.ts`                                | OpenAI / `OPENAI_MODEL`          |
+| Title generator                                                      | `src/lib/title-generator.functions.ts`                           | OpenAI / `OPENAI_MODEL`          |
+| Source-idea generator                                                | `src/lib/source-idea.server.ts` + `/api/ai/source-idea/generate` | OpenAI / `OPENAI_MODEL`          |
+| Audio ducking suggestions                                            | `src/lib/audio-render.server.ts` (media processor)               | rules + processor                |
 
-Gateway errors are surfaced verbatim in the UI: **402** → "AI credits are
-exhausted for this workspace", **429** → rate limited, everything else →
-`[SOURCE_IDEA_AI_ERROR]` server log with the reason shown in the toast.
+Provider errors are converted to safe user messages for quota, rate-limit,
+authentication, access, and availability failures. Server logs contain only
+provider/status/code/type/request-ID metadata; prompts, outputs, headers,
+response bodies, and credentials are not logged.
 
 ---
 
@@ -448,6 +451,8 @@ Stored as backend secrets and read inside server handlers only.
 
 | Secret name                             | Used for                                                                                       |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`                        | OpenAI AI-writing provider (server-only)                                                       |
+| `OPENAI_MODEL`                          | Optional model override; defaults to `gpt-5.6-terra`                                          |
 | `LOVABLE_API_KEY`                       | Lovable AI Gateway (managed; rotate from Lovable, not in code)                                 |
 | `SUPABASE_SECRET_KEY`                   | Privileged PostFlow server operations (server-only; legacy alias: `SUPABASE_SERVICE_ROLE_KEY`) |
 | `YOUTUBE_OAUTH_CLIENT_ID`               | YouTube publishing OAuth                                                                       |
@@ -458,6 +463,7 @@ Stored as backend secrets and read inside server handlers only.
 | `META_PAGES_MANAGE_POSTS_AVAILABLE`     | flag: request `pages_manage_posts` scope or not                                                |
 | `INSTAGRAM_OAUTH_CLIENT_ID`             | Instagram Login                                                                                |
 | `INSTAGRAM_OAUTH_CLIENT_SECRET`         | Instagram Login                                                                                |
+| `INSTAGRAM_REDIRECT_URI`                | Exact HTTPS Instagram OAuth callback URL                                                       |
 | `SNAPCHAT_OAUTH_CLIENT_ID`              | Snapchat Login Kit (confidential client)                                                       |
 | `SNAPCHAT_OAUTH_CLIENT_SECRET`          | Snapchat Login Kit                                                                             |
 | `SNAPCHAT_OAUTH_PUBLIC_CLIENT_ID`       | Snapchat Login Kit (public client, PKCE)                                                       |
@@ -486,6 +492,10 @@ the app itself returns to `/auth/callback` after Supabase verifies the login.
 > Secrets are never kept in a committed `.env`. They are stored through Lovable's
 > secret manager and injected as environment variables at runtime.
 
+Use `.env.example` for variable names and placeholders. Before committing,
+run `npm run security:scan`; the repository also runs a staged-file hook and
+a full-history Gitleaks GitHub Actions workflow.
+
 ---
 
 ## 14. What was deleted / replaced along the way
@@ -500,4 +510,4 @@ the app itself returns to `/auth/callback` after Supabase verifies the login.
 | Whole-video in-memory YouTube upload                                                               | resumable chunked upload with progress persistence                          |
 | Always-on audio mixing                                                                             | mixing skipped when no extra track is attached                              |
 | Old Snapchat client IDs/redirects                                                                  | current Login Kit + Public Profile OAuth apps                               |
-| Generic "could not generate" AI toast                                                              | exact gateway reason (credits / rate limit / provider error)                |
+| Direct per-feature gateway calls                                                                    | one server-only provider with OpenAI primary and Lovable fallback           |

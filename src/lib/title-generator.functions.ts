@@ -14,8 +14,6 @@ import {
   type TitleAnalysis,
 } from "@/lib/title-generator";
 
-const MODEL = "google/gemini-3.6-flash";
-
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const list = (v: unknown) =>
   Array.isArray(v)
@@ -78,22 +76,9 @@ function parseJson(text: string | undefined): Record<string, unknown> | null {
   return null;
 }
 
-async function runModel(system: string, prompt: string): Promise<string> {
-  const key = process.env["LOVABLE_API_KEY"];
-  if (!key) throw new Error("AI is not configured for this project yet.");
-  const { createLovableAiGatewayProvider } = await import("@/lib/ai-gateway.server");
-  const { streamText } = await import("ai");
-  const gateway = createLovableAiGatewayProvider(key);
-  try {
-    // Streamed so long generations keep bytes flowing; only the final text is used.
-    const result = streamText({ model: gateway(MODEL), system, prompt });
-    return await result.text;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("429")) throw new Error("AI is rate limited right now — try again shortly.");
-    if (message.includes("402")) throw new Error("AI credits are exhausted for this workspace.");
-    throw new Error("The AI writer could not be reached — try again.");
-  }
+async function runModel(system: string, prompt: string, userId: string): Promise<string> {
+  const { generateAiText } = await import("@/lib/ai-provider.server");
+  return generateAiText({ system, prompt, userId, maxOutputTokens: 8_000 });
 }
 
 const PLATFORM_BRIEF: Record<GeneratorPlatform, string> = {
@@ -156,7 +141,7 @@ const generateInput = contextInput.extend({
 export const generateFromTitle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => generateInput.parse(data))
-  .handler(async ({ data }): Promise<GeneratorResult> => {
+  .handler(async ({ data, context }): Promise<GeneratorResult> => {
     const brief = data.platforms.map((p) => `- ${PLATFORM_BRIEF[p]}`).join("\n");
     const text = await runModel(
       EXPERT_SYSTEM,
@@ -168,6 +153,7 @@ export const generateFromTitle = createServerFn({ method: "POST" })
         `Return JSON exactly shaped as {"analysis":{"mainTopic":"","category":"","targetAudience":"","searchIntent":"","userIntent":"","contentType":"","writingStyle":"","platformStrategy":""},"cards":[${CARD_SHAPE}],"relatedTopics":[""]}.`,
         `Use "" or [] for fields that do not apply. platform must be exactly one of: ${data.platforms.join(", ")}. Return JSON only.`,
       ].join("\n\n"),
+      context.userId,
     );
 
     const parsed = parseJson(text);
@@ -204,7 +190,7 @@ const regenerateInput = contextInput.extend({
 export const regeneratePlatformCard = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => regenerateInput.parse(data))
-  .handler(async ({ data }): Promise<GeneratedPlatformCard> => {
+  .handler(async ({ data, context }): Promise<GeneratedPlatformCard> => {
     const text = await runModel(
       EXPERT_SYSTEM,
       [
@@ -215,6 +201,7 @@ export const regeneratePlatformCard = createServerFn({ method: "POST" })
       ]
         .filter(Boolean)
         .join("\n\n"),
+      context.userId,
     );
     const parsed = parseJson(text);
     const card = normalizeCard(parsed?.["card"] ?? parsed);
@@ -253,7 +240,7 @@ const ACTION_BRIEF: Record<(typeof IMPROVE_ACTIONS)[number], string> = {
 export const improveField = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => improveInput.parse(data))
-  .handler(async ({ data }): Promise<{ value: string; items: string[] }> => {
+  .handler(async ({ data, context }): Promise<{ value: string; items: string[] }> => {
     const text = await runModel(
       EXPERT_SYSTEM,
       [
@@ -269,6 +256,7 @@ export const improveField = createServerFn({ method: "POST" })
       ]
         .filter(Boolean)
         .join("\n\n"),
+      context.userId,
     );
     const parsed = parseJson(text);
     if (data.isList) {

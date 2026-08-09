@@ -9,7 +9,9 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "security:scan": "node scripts/check-secrets.mjs --tracked",
+    "security:staged": "node scripts/check-secrets.mjs --staged"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.20",
@@ -56,6 +58,7 @@
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
+    "openai": "^7.4.0",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.0",

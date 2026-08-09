@@ -14,6 +14,7 @@ import {
 } from "@/lib/snapchat-public-profile.functions";
 import { SNAPCHAT_DESTINATION_LABEL } from "@/lib/snapchat-media-validation";
 import { snapchatErrorMessage } from "@/lib/snapchat-errors";
+import { clientErrorMessage } from "@/lib/client-error-message";
 
 export function SnapchatPublicProfileCard() {
   const queryClient = useQueryClient();
@@ -24,9 +25,10 @@ export function SnapchatPublicProfileCard() {
   const disconnect = useServerFn(disconnectSnapchatPublicProfile);
   const [busy, setBusy] = useState(false);
 
-  const { data } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["snapchat-public-profile-status"],
     queryFn: () => fetchStatus({ data: undefined }),
+    staleTime: 60_000,
   });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["snapchat-public-profile-status"] });
@@ -54,6 +56,33 @@ export function SnapchatPublicProfileCard() {
       setBusy(false);
       toast.error((error as Error).message);
     }
+  }
+
+  if (isLoading) {
+    return (
+      <section className="rounded-2xl border border-border p-4 text-sm" aria-busy="true">
+        <h3 className="font-semibold">Snapchat automatic publishing</h3>
+        <p className="pt-1 text-xs text-muted-foreground">Checking server configurationâ€¦</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="rounded-2xl border border-dashed border-destructive/50 p-4 text-sm">
+        <h3 className="font-semibold">Snapchat automatic publishing</h3>
+        <p className="pt-1 text-xs text-muted-foreground">
+          {clientErrorMessage(error, "The Snapchat configuration service is temporarily unavailable.")}
+        </p>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          className="mt-3 rounded-md border border-border px-3 py-1.5 text-xs font-semibold hover:bg-accent"
+        >
+          Try again
+        </button>
+      </section>
+    );
   }
 
   if (!data?.configured) {
@@ -140,6 +169,24 @@ export function SnapchatPublicProfileCard() {
           )}
         </div>
       </div>
+
+      {data.redirectUri && (
+        <div className="mt-3 rounded-lg border border-dashed border-border p-3 text-xs">
+          <p className="font-semibold">Snapchat Business redirect URI</p>
+          <p className="mt-1 text-muted-foreground">
+            Register this exact value in the Snapchat Business OAuth app (including the full path,
+            with no trailing slash):
+          </p>
+          <code className="mt-2 block break-all rounded-md bg-muted px-2 py-1.5">
+            {data.redirectUri}
+          </code>
+          {data.clientIdPrefix && (
+            <p className="mt-2 text-muted-foreground">
+              Client ID: <code>{data.clientIdPrefix}…</code>
+            </p>
+          )}
+        </div>
+      )}
 
       {data.profiles.length > 1 && (
         <label className="mt-3 block text-xs">

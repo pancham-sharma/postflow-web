@@ -740,10 +740,21 @@ function CreatePost() {
             <div className="grid gap-3 sm:grid-cols-[110px_minmax(0,1fr)]">
               <div className="mesh-vanilla relative aspect-[9/16] overflow-hidden rounded-xl border border-border bg-primary/10">
                 {previewUrl && !isVideo && (
-                  <img src={previewUrl} alt={file.name} className="size-full object-cover" />
+                  <img
+                    src={previewUrl}
+                    alt={file.name}
+                    decoding="async"
+                    className="size-full object-cover"
+                  />
                 )}
                 {previewUrl && isVideo && (
-                  <video src={previewUrl} muted playsInline className="size-full object-cover" />
+                  <video
+                    src={previewUrl}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="size-full object-cover"
+                  />
                 )}
                 <button
                   type="button"

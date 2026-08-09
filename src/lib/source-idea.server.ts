@@ -9,8 +9,6 @@ import {
   type SourcePlatformContent,
 } from "@/lib/source-idea";
 
-const MODEL = "google/gemini-3.6-flash";
-
 export const SOURCE_IDEA_SYSTEM_PROMPT =
   "You are PostFlow AI, a platform-specific social media content strategist, SEO writer, copywriter, and hashtag researcher. " +
   "The user provides a source title. Analyse the title and generate separate optimized content for every requested social platform. " +
@@ -97,36 +95,14 @@ function parseJson(text: string | undefined): Record<string, unknown> | null {
   return null;
 }
 
-async function runModel(system: string, prompt: string, signal?: AbortSignal): Promise<string> {
-  const key = process.env["LOVABLE_API_KEY"];
-  if (!key) throw new Error("AI is not configured for this project yet.");
-  const { createLovableAiGatewayProvider } = await import("@/lib/ai-gateway.server");
-  const { streamText } = await import("ai");
-  const gateway = createLovableAiGatewayProvider(key);
-  try {
-    // Streamed so long generations keep bytes flowing; only the final text is used.
-    const options = signal ? { abortSignal: signal } : {};
-    const result = streamText({ model: gateway(MODEL), system, prompt, ...options });
-    return await result.text;
-  } catch (error) {
-    const err = error as { statusCode?: number; responseBody?: string; message?: string };
-    const status = typeof err?.statusCode === "number" ? err.statusCode : undefined;
-    const message = [err?.message, err?.responseBody, String(error)].filter(Boolean).join(" ");
-    console.error("[SOURCE_IDEA_AI_ERROR]", { status, message: message.slice(0, 300) });
-    if (status === 429 || message.includes("429") || /rate limit/i.test(message)) {
-      throw new Error("AI is rate limited right now — try again shortly.");
-    }
-    if (
-      status === 402 ||
-      message.includes("402") ||
-      /payment_required|not enough credits|credits/i.test(message)
-    ) {
-      throw new Error(
-        "AI credits are exhausted for this workspace — add credits in Settings, then try again.",
-      );
-    }
-    throw new Error("The AI writer could not be reached — try again.");
-  }
+async function runModel(
+  system: string,
+  prompt: string,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const { generateAiText } = await import("@/lib/ai-provider.server");
+  return generateAiText({ system, prompt, userId, signal, maxOutputTokens: 8_000 });
 }
 
 const PLATFORM_BRIEF: Record<SourceIdeaPlatform, string> = {
@@ -214,6 +190,7 @@ function isEmpty(card: SourcePlatformContent) {
 export async function generatePlatformFromTitle(
   input: SourceIdeaInput,
   platform: SourceIdeaPlatform,
+  userId: string,
   signal?: AbortSignal,
 ): Promise<SourcePlatformContent> {
   const text = await runModel(
@@ -224,6 +201,7 @@ export async function generatePlatformFromTitle(
       `Step 2 — write content for ${SOURCE_IDEA_PLATFORM_LABEL[platform]} only, native to that platform:\n${PLATFORM_BRIEF[platform]}`,
       `Return JSON exactly shaped as {"content":${CARD_SHAPE}}. Use "" or [] for fields that do not apply. Return JSON only.`,
     ].join("\n\n"),
+    userId,
     signal,
   );
   const parsed = parseJson(text);
@@ -237,6 +215,7 @@ export async function generatePlatformFromTitle(
 /** Analyses the source title on its own. */
 export async function analyzeSourceTitle(
   input: SourceIdeaInput,
+  userId: string,
   signal?: AbortSignal,
 ): Promise<SourceAnalysis> {
   const text = await runModel(
@@ -246,6 +225,7 @@ export async function analyzeSourceTitle(
       "Analyse this title only. Do not invent facts, prices, statistics, dates or product claims that the title does not contain.",
       'Return JSON exactly shaped as {"source_analysis":{"original_title":"","improved_title":"","topic":"","category":"","search_intent":"","target_audience":"","tone":"","keywords":[]}}. Return JSON only.',
     ].join("\n\n"),
+    userId,
     signal,
   );
   const parsed = parseJson(text);
@@ -272,10 +252,11 @@ export type SourceIdeaBatch = {
 export async function generateSourceIdeaBatch(
   input: SourceIdeaInput,
   platforms: SourceIdeaPlatform[],
+  userId: string,
   signal?: AbortSignal,
 ): Promise<SourceIdeaBatch> {
   const warnings: string[] = [];
-  const analysis = await analyzeSourceTitle(input, signal).catch((error: unknown) => {
+  const analysis = await analyzeSourceTitle(input, userId, signal).catch((error: unknown) => {
     warnings.push(
       `Title analysis failed: ${error instanceof Error ? error.message : "unknown error"}`,
     );
@@ -292,7 +273,7 @@ export async function generateSourceIdeaBatch(
   });
 
   const results = await Promise.allSettled(
-    platforms.map((platform) => generatePlatformFromTitle(input, platform, signal)),
+    platforms.map((platform) => generatePlatformFromTitle(input, platform, userId, signal)),
   );
 
   const out: Partial<Record<SourceIdeaPlatform, SourcePlatformContent>> = {};

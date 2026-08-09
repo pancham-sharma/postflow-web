@@ -7,6 +7,7 @@ import { Loader2, ShieldCheck, TriangleAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { verifyAuthenticatedSessionWithFallback } from "@/lib/auth-session";
 import { peekNext, takeNext, startGoogleSignIn, clearNext } from "@/lib/auth-next";
+import { authUserMessage, logAuthFailure } from "@/lib/supabase-auth-errors";
 
 export const Route = createFileRoute("/auth/callback")({
   // The Supabase session lives in localStorage, so this page is browser-only.
@@ -47,8 +48,9 @@ function GoogleCallback() {
     setPhase("waiting");
     const { data: userData, error } = await supabase.auth.getUser();
     if (error || !userData.user) {
+      if (error) logAuthFailure("google_callback_get_user", error);
       setPhase("failed");
-      setReason(REASONS['no_session']!);
+      setReason(error ? authUserMessage(error, "session") : REASONS['no_session']!);
       return;
     }
     setPhase("verifying");

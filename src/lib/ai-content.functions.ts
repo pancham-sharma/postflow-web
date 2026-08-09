@@ -98,18 +98,11 @@ const PLATFORM_BRIEF: Record<string, string> = {
 export const generatePlatformContent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => input.parse(data))
-  .handler(async ({ data }): Promise<GeneratedCard[]> => {
-    const key = process.env["LOVABLE_API_KEY"];
-    if (!key) throw new Error("AI is not configured for this project yet.");
-
-    const { createLovableAiGatewayProvider } = await import("@/lib/ai-gateway.server");
-    const { streamText } = await import("ai");
-
-    const gateway = createLovableAiGatewayProvider(key);
+  .handler(async ({ data, context }): Promise<GeneratedCard[]> => {
+    const { generateAiText } = await import("@/lib/ai-provider.server");
     const brief = data.platforms.map((p) => `- ${PLATFORM_BRIEF[p] ?? p}`).join("\n");
 
-    const result = streamText({
-      model: gateway("google/gemini-2.5-flash"),
+    const text = await generateAiText({
       system:
         "You are a senior social media copywriter. Write native, platform-specific copy. " +
         "Never reuse the same wording across platforms — each variant must read as if written for that app only. " +
@@ -123,9 +116,11 @@ export const generatePlatformContent = createServerFn({ method: "POST" })
         `Write one distinct variant for each of these platforms:\n${brief}`,
         `platform must be exactly one of: ${data.platforms.join(", ")}. Return JSON only.`,
       ].join("\n\n"),
+      userId: context.userId,
+      maxOutputTokens: 8_000,
     });
 
-    const cards = parseCards(await result.text);
+    const cards = parseCards(text);
     if (cards.length === 0) {
       throw new Error("The AI writer returned an unexpected response — try again.");
     }

@@ -5,6 +5,8 @@ import type { SnapchatDestination } from "@/lib/snapchat-media-validation";
 
 export type SnapchatPublicProfileStatus = {
   configured: boolean;
+  redirectUri: string | null;
+  clientIdPrefix: string | null;
   connected: boolean;
   apiAvailable: boolean;
   connectionStatus: "connected" | "reconnect_required" | "api_unavailable" | "disconnected" | null;
@@ -25,10 +27,21 @@ export const getSnapchatPublicProfileStatus = createServerFn({ method: "POST" })
   .handler(async ({ context }): Promise<SnapchatPublicProfileStatus> => {
     const service = await import("@/lib/snapchat-public-profile.server");
     const configured = service.checkConfiguration().configured;
+    const redirectUri = (() => {
+      try {
+        return service.redirectUri(null);
+      } catch {
+        return null;
+      }
+    })();
+    const clientId = (process.env["SNAPCHAT_PUBLIC_PROFILE_CLIENT_ID"] ?? "").trim();
+    const clientIdPrefix = clientId ? clientId.slice(0, 8) : null;
     const connection = await service.getConnection(context.userId);
     if (!connection) {
       return {
         configured,
+        redirectUri,
+        clientIdPrefix,
         connected: false,
         apiAvailable: false,
         connectionStatus: null,
@@ -45,6 +58,8 @@ export const getSnapchatPublicProfileStatus = createServerFn({ method: "POST" })
     }
     return {
       configured,
+      redirectUri,
+      clientIdPrefix,
       connected: true,
       apiAvailable: connection.apiAvailable,
       connectionStatus: connection.connectionStatus,
@@ -81,15 +96,12 @@ export const startSnapchatPublicProfileAuth = createServerFn({ method: "POST" })
       throw new Error("Automatic Snapchat publishing is not configured on the server.");
     }
 
+    const { isTrustedOrigin } = await import("@/lib/public-origin");
     const origin = (() => {
       if (!data.origin) return null;
       try {
         const candidate = new URL(data.origin);
-        const allowed =
-          candidate.hostname === "localhost" ||
-          candidate.hostname.endsWith(".lovable.app") ||
-          candidate.hostname.endsWith(".lovableproject.com");
-        return allowed ? candidate.origin : null;
+        return isTrustedOrigin(candidate.origin) ? candidate.origin : null;
       } catch {
         return null;
       }

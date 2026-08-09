@@ -131,7 +131,9 @@ export async function getConnection(userId: string): Promise<PublicProfileConnec
   const supabase = await db();
   const { data, error } = await supabase
     .from("snapchat_public_profile_connections")
-    .select("*")
+    .select(
+      "id, user_id, token_expires_at, granted_scopes, public_profile_id, public_profile_name, available_profiles, public_profile_api_available, capabilities, connection_status, last_error_code, last_verified_at, connected_at",
+    )
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;

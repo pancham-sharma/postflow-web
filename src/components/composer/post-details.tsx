@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 import { Check, Loader2, Sparkles, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { inputCls } from "@/components/form-styles";
 import {
   SOURCE_IDEA_LANGUAGES,
   SOURCE_IDEA_TONES,
@@ -33,9 +34,6 @@ export const emptyPostDetails: PostDetailValues = {
   audience: "",
   location: "",
 };
-
-export const inputCls =
-  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40";
 
 export type GenerateStatus = "idle" | "loading" | "success" | "error";
 

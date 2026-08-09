@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { SessionVerification } from "@/lib/auth.functions";
+import { logAuthFailure } from "@/lib/supabase-auth-errors";
 
 /**
  * Browser-side fallback for local development environments where the server
@@ -33,7 +34,7 @@ export async function verifyAuthenticatedSessionWithFallback(): Promise<SessionV
   const { verifyAuthenticatedSession } = await import("@/lib/auth.functions");
   const serverVerification = await Promise.race([
     verifyAuthenticatedSession().catch((error) => {
-      console.warn("[auth] server verification unavailable; checking through Supabase RLS", error);
+      logAuthFailure("server_session_verification", error);
       return null;
     }),
     // Do not leave the login screen hanging when a local Node process cannot
@@ -43,7 +44,7 @@ export async function verifyAuthenticatedSessionWithFallback(): Promise<SessionV
   if (serverVerification?.ok) return serverVerification;
 
   return verifyAuthenticatedBrowserSession().catch((error) => {
-    console.error("[auth] browser verification failed", error);
+    logAuthFailure("browser_session_verification", error);
     return null;
   });
 }

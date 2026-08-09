@@ -78,7 +78,11 @@ export const Route = createFileRoute("/api/ai/source-idea/generate")({
           targetAudience: parsed.data.target_audience,
           location: parsed.data.location,
         };
-        const batch = await generateSourceIdeaBatch(input, parsed.data.platforms);
+        const batch = await generateSourceIdeaBatch(
+          input,
+          parsed.data.platforms,
+          userData.user.id,
+        );
 
         const platforms: Record<string, ReturnType<typeof serialize>> = {};
         for (const [platform, content] of Object.entries(batch.platforms)) {

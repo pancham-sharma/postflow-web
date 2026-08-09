@@ -226,6 +226,7 @@ function Header() {
 
 function HeroMock() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const tiltFrame = useRef<number | null>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -260,11 +261,28 @@ function HeroMock() {
     setPaused(false);
   }, [reelIndex]);
 
+  useEffect(
+    () => () => {
+      if (tiltFrame.current != null) cancelAnimationFrame(tiltFrame.current);
+    },
+    [],
+  );
+
   const handleTilt = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const px = (event.clientX - rect.left) / rect.width - 0.5;
     const py = (event.clientY - rect.top) / rect.height - 0.5;
-    setTilt({ x: py * -12, y: px * 14 });
+    if (tiltFrame.current != null) cancelAnimationFrame(tiltFrame.current);
+    tiltFrame.current = requestAnimationFrame(() => {
+      tiltFrame.current = null;
+      setTilt({ x: py * -12, y: px * 14 });
+    });
+  }, []);
+
+  const resetTilt = useCallback(() => {
+    if (tiltFrame.current != null) cancelAnimationFrame(tiltFrame.current);
+    tiltFrame.current = null;
+    setTilt({ x: 0, y: 0 });
   }, []);
 
   return (
@@ -273,7 +291,7 @@ function HeroMock() {
         <div className="[perspective:1000px]">
           <div
             onPointerMove={handleTilt}
-            onPointerLeave={() => setTilt({ x: 0, y: 0 })}
+            onPointerLeave={resetTilt}
             style={{
               transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale(${tilt.x || tilt.y ? 1.04 : 1})`,
             }}

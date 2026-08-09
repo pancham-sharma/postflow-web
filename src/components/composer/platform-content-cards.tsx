@@ -13,7 +13,7 @@ import {
   type CardIssue,
   type PlatformContent,
 } from "@/lib/platform-content";
-import { inputCls } from "@/components/composer/post-details";
+import { inputCls } from "@/components/form-styles";
 
 export type CardTarget = {
   /** Unique per selected account — one card per account, never shared. */

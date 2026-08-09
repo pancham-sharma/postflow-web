@@ -2,14 +2,20 @@
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 import type { Database } from "./types";
+import {
+  classifyAuthError,
+  isAuthAvailabilityError,
+  logAuthFailure,
+} from "@/lib/supabase-auth-errors";
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
 }
 
-function createSupabaseFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
+function createSupabaseFetch(supabaseKey: string, timeoutMs = 10_000): typeof fetch {
+  return async (input, init) => {
     const headers = new Headers(
       typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined,
     );
@@ -27,14 +33,71 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
     }
 
     headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
+    const controller = new AbortController();
+    const upstream = init?.signal;
+    const abort = () => controller.abort(upstream?.reason);
+    if (upstream?.aborted) abort();
+    else upstream?.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(
+      () => controller.abort(new Error("Supabase Auth request timed out")),
+      timeoutMs,
+    );
+    try {
+      return await fetch(input, { ...init, headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+      upstream?.removeEventListener("abort", abort);
+    }
   };
+}
+
+type VerifiedUser = { id: string; email?: string };
+const validationsInFlight = new Map<string, Promise<VerifiedUser>>();
+
+function cleanEnv(name: string): string {
+  return (process.env[name] ?? "")
+    .trim()
+    .replace(/^['"]|['"]$/g, "")
+    .trim();
+}
+
+/**
+ * Concurrent server functions share one authoritative getUser(token) request.
+ * Only the in-flight promise is cached, never the token or an authorization
+ * decision, so revocation/session freshness is not weakened.
+ */
+async function verifyToken(
+  supabaseUrl: string,
+  publishableKey: string,
+  token: string,
+): Promise<VerifiedUser> {
+  const fingerprint = createHash("sha256").update(token).digest("hex");
+  const existing = validationsInFlight.get(fingerprint);
+  if (existing) return existing;
+
+  const pending = (async () => {
+    const verifier = createClient<Database>(supabaseUrl, publishableKey, {
+      global: { fetch: createSupabaseFetch(publishableKey) },
+      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await verifier.auth.getUser(token);
+    if (error) throw error;
+    if (!data.user?.id) throw new Error("Supabase Auth returned no user for this token");
+    return { id: data.user.id, email: data.user.email };
+  })();
+
+  validationsInFlight.set(fingerprint, pending);
+  try {
+    return await pending;
+  } finally {
+    validationsInFlight.delete(fingerprint);
+  }
 }
 
 export const requireSupabaseAuth = createMiddleware({ type: "function" }).server(
   async ({ next }) => {
-    const SUPABASE_URL = process.env["SUPABASE_URL"];
-    const SUPABASE_PUBLISHABLE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"];
+    const SUPABASE_URL = cleanEnv("SUPABASE_URL");
+    const SUPABASE_PUBLISHABLE_KEY = cleanEnv("SUPABASE_PUBLISHABLE_KEY");
 
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
       const missing = [
@@ -77,52 +140,51 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
       throw new Error("Unauthorized: Invalid token");
     }
 
-    const supabase = createClient<Database>(SUPABASE_URL!, SUPABASE_PUBLISHABLE_KEY!, {
-      global: {
-        fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY!),
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-      auth: {
-        storage: undefined,
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-
     // Validate the token with Supabase Auth itself. `getClaims()` performs a
     // local JWKS verification that is not reliable for every hosted project's
     // signing-key configuration, while `getUser(token)` is authoritative for
     // both password and OAuth sessions.
-    const { data, error } = await supabase.auth.getUser(token);
-    if (error) {
-      const message = error.message ?? "";
-      if (/fetch failed|network|timed? out|econn|enotfound/i.test(message)) {
-        // Do not classify an Auth transport outage as a bad session: callers
-        // use Unauthorized errors to clear local sessions and redirect.
-        throw new Error("Supabase Auth is temporarily unavailable");
+    let verified: VerifiedUser;
+    try {
+      verified = await verifyToken(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, token);
+    } catch (error) {
+      logAuthFailure("server_token_validation", error);
+      if (isAuthAvailabilityError(error)) {
+        // Fail closed without destroying a valid browser session during a real
+        // transport outage. The 503 message is intentionally distinct from 401.
+        const networkFailure = classifyAuthError(error) === "network";
+        const unavailable = new Error(
+          networkFailure
+            ? "Unable to reach the authentication service. Check your connection and try again."
+            : "Authentication service is temporarily unavailable. Please try again.",
+        ) as Error & { code: string; statusCode: number };
+        unavailable.name = "SupabaseAuthUnavailableError";
+        unavailable.code = networkFailure
+          ? "supabase_auth_network_unavailable"
+          : "supabase_auth_unavailable";
+        unavailable.statusCode = 503;
+        throw unavailable;
       }
-      throw new Error("Unauthorized: Invalid token");
+      throw new Error("Unauthorized: Invalid or expired token");
     }
 
-    if (!data?.user) {
-      throw new Error("Unauthorized: Invalid token");
-    }
-
-    if (!data.user.id) {
-      throw new Error("Unauthorized: No user ID found in token");
-    }
+    const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      global: {
+        fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY),
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+    });
 
     const claims = {
-      sub: data.user.id,
-      email: data.user.email,
+      sub: verified.id,
+      email: verified.email,
     };
 
     return next({
       context: {
         supabase,
-        userId: data.user.id,
+        userId: verified.id,
         claims,
       },
     });

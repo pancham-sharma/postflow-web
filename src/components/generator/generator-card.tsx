@@ -1,8 +1,8 @@
 import { memo, useState } from "react";
-import { Check, Copy, Loader2, RefreshCw, Save, Sparkles, Pencil } from "lucide-react";
+import { Check, Copy, Loader2, RefreshCw, Save, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { inputCls } from "@/components/composer/post-details";
+import { inputCls } from "@/components/form-styles";
 import {
   CARD_FIELDS,
   CARD_LISTS,
@@ -14,12 +14,6 @@ import {
   type ImproveAction,
   type ListFieldKey,
 } from "@/lib/title-generator";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 const btnCls =
   "inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50";
@@ -48,26 +42,29 @@ function ImproveMenu({
   onPick: (action: ImproveAction) => void;
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          disabled={busy}
-          aria-label="AI improve this field"
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
-        >
-          {busy ? <Loader2 className="size-3 animate-spin" aria-hidden /> : <Sparkles className="size-3" aria-hidden />}
-          AI
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
+    <label className="relative inline-flex items-center">
+      <span className="sr-only">AI improve this field</span>
+      {busy && (
+        <Loader2 className="pointer-events-none absolute left-2 size-3 animate-spin" aria-hidden />
+      )}
+      <select
+        value=""
+        disabled={busy}
+        aria-label="AI improve this field"
+        onChange={(event) => {
+          const action = event.target.value as ImproveAction;
+          if (action) onPick(action);
+        }}
+        className="h-7 max-w-40 rounded-md border border-border bg-background py-1 pl-2 pr-7 text-[11px] font-semibold text-muted-foreground hover:text-foreground disabled:pl-7 disabled:opacity-50"
+      >
+        <option value="">AI improve…</option>
         {actions.map((action) => (
-          <DropdownMenuItem key={action} onSelect={() => onPick(action)}>
+          <option key={action} value={action}>
             {IMPROVE_LABELS[action]}
-          </DropdownMenuItem>
+          </option>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </select>
+    </label>
   );
 }
 
