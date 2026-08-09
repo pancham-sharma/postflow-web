@@ -6,7 +6,44 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
+import { resolve as resolveProjectPath, sep } from "node:path";
 import { loadEnv, type Plugin } from "vite";
+
+const projectRoot = resolveProjectPath(process.cwd());
+const mcpRoutesDir = resolveProjectPath(projectRoot, "src/routes");
+const projectRootPrefix = projectRoot.endsWith(sep) ? projectRoot : `${projectRoot}${sep}`;
+
+if (mcpRoutesDir !== projectRoot && !mcpRoutesDir.startsWith(projectRootPrefix)) {
+  throw new Error("MCP routes directory must remain inside the project root.");
+}
+
+/**
+ * @lovable.dev/mcp-js compares resolved paths using the platform separator.
+ * Vite normalizes config.root to forward slashes on Windows, so let the MCP
+ * plugin resolve against the native root for its containment check and then
+ * restore Vite's normalized value for every other plugin.
+ */
+function mcpPluginWithPortableRoutes(): Plugin {
+  const plugin = mcpPlugin({ routesDir: mcpRoutesDir });
+  const configResolved =
+    typeof plugin.configResolved === "function" ? plugin.configResolved : undefined;
+  if (!configResolved) return plugin;
+
+  return {
+    ...plugin,
+    configResolved(config) {
+      if (process.platform !== "win32") return configResolved(config);
+
+      const normalizedRoot = config.root;
+      config.root = projectRoot;
+      try {
+        return configResolved(config);
+      } finally {
+        config.root = normalizedRoot;
+      }
+    },
+  };
+}
 
 // Vite exposes only VITE_* values to application modules. That is correct for
 // the browser, but local TanStack server functions also need the same backend
@@ -73,6 +110,6 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [localServerEnv(), mcpPlugin()],
+    plugins: [localServerEnv(), mcpPluginWithPortableRoutes()],
   },
 });
