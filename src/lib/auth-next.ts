@@ -31,6 +31,43 @@ export function clearNext() {
   if (typeof window !== "undefined") sessionStorage.removeItem(KEY);
 }
 
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+function googleRedirectOrigin(): string {
+  const configured = String(import.meta.env.VITE_POSTFLOW_APP_URL ?? "").trim();
+  const current = window.location.origin;
+
+  // Local development intentionally follows the local browser origin, even
+  // when an ignored .env.local contains production provider URLs.
+  if (import.meta.env.DEV) return current;
+
+  if (configured) {
+    try {
+      const origin = new URL(configured, current).origin;
+      if (isLoopbackOrigin(origin)) {
+        throw new Error("POSTFLOW_APP_URL must not be loopback in production.");
+      }
+      return origin;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("loopback")) throw error;
+    }
+  }
+
+  // A missing production setting may use the current public host as a safe
+  // fallback, but never allow a deployed build to send users to loopback.
+  if (isLoopbackOrigin(current)) {
+    throw new Error("POSTFLOW_APP_URL is required for production Google sign-in.");
+  }
+  return current;
+}
+
 /** Starts (or restarts) the Google OAuth round-trip through Supabase Auth. */
 export async function startGoogleSignIn(next?: string | null) {
   const { supabase } = await import("@/integrations/supabase/client");
@@ -39,7 +76,7 @@ export async function startGoogleSignIn(next?: string | null) {
     provider: "google",
     options: {
       // Public same-origin callback — the status page verifies then forwards.
-      redirectTo: window.location.origin + "/auth/callback",
+      redirectTo: `${googleRedirectOrigin()}/auth/callback`,
       queryParams: { prompt: "select_account consent" },
       skipBrowserRedirect: true,
     },

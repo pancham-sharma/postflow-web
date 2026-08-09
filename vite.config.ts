@@ -99,6 +99,20 @@ function localServerEnv(): Plugin {
   };
 }
 
+function configuredPublicAppUrl(): string {
+  // POSTFLOW_APP_URL is a public origin, but it is intentionally not exposed
+  // through Vite's normal env prefix. Read it here and project only its
+  // normalized origin into the browser bundle.
+  const loaded = loadEnv("development", process.cwd(), "");
+  const raw = (process.env["POSTFLOW_APP_URL"] ?? loaded["POSTFLOW_APP_URL"] ?? "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "";
+  }
+}
+
 export default defineConfig({
   // Render runs this as a Node web service. Lovable's own build still forces
   // its Cloudflare target internally, so this preserves Lovable deployment
@@ -110,6 +124,12 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
+    // POSTFLOW_APP_URL is a public origin, not a credential. Expose only its
+    // normalized origin so browser OAuth can use the deployment URL without
+    // adding a second environment variable or embedding a production URL.
+    define: {
+      "import.meta.env.VITE_POSTFLOW_APP_URL": JSON.stringify(configuredPublicAppUrl()),
+    },
     plugins: [localServerEnv(), mcpPluginWithPortableRoutes()],
   },
 });
