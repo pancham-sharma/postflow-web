@@ -34,7 +34,6 @@ dist-ssr
 # Environment & secrets — never commit
 .env
 .env.*
-!.env.example
 *.env
 .envrc
 .dev.vars*
