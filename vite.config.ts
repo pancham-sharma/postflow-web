@@ -61,6 +61,10 @@ function localServerEnv(): Plugin {
 }
 
 export default defineConfig({
+  // Render runs this as a Node web service. Lovable's own build still forces
+  // its Cloudflare target internally, so this preserves Lovable deployment
+  // behavior while producing a runnable Node SSR entry for Render.
+  nitro: { preset: "node-server" },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

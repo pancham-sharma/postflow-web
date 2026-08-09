@@ -1,0 +1,65 @@
+services:
+  - type: web
+    name: postflow-web
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: POSTFLOW_APP_URL
+        sync: false
+      - key: POSTFLOW_TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: SOCIAL_TOKEN_ENC_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5.6-terra
+      - key: LOVABLE_API_KEY
+        sync: false
+      - key: META_OAUTH_CLIENT_ID
+        sync: false
+      - key: META_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: INSTAGRAM_OAUTH_CLIENT_ID
+        sync: false
+      - key: INSTAGRAM_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: INSTAGRAM_REDIRECT_URI
+        sync: false
+      - key: SNAPCHAT_OAUTH_CLIENT_ID
+        sync: false
+      - key: SNAPCHAT_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: SNAPCHAT_OAUTH_PUBLIC_CLIENT_ID
+        sync: false
+      - key: SNAPCHAT_REDIRECT_URI
+        sync: false
+      - key: SNAPCHAT_PUBLIC_PROFILE_CLIENT_ID
+        sync: false
+      - key: SNAPCHAT_PUBLIC_PROFILE_CLIENT_SECRET
+        sync: false
+      - key: SNAPCHAT_PUBLIC_PROFILE_REDIRECT_URI
+        sync: false
+      - key: YOUTUBE_OAUTH_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_REDIRECT_URI
+        sync: false
+      - key: PINTEREST_OAUTH_CLIENT_ID
+        sync: false
+      - key: PINTEREST_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: MEDIA_PROCESSOR_URL
+        sync: false
+      - key: MEDIA_PROCESSOR_TOKEN
+        sync: false

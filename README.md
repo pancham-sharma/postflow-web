@@ -145,6 +145,22 @@ bun install
 bun run dev     # http://localhost:8080
 ```
 
+### Render deployment
+
+This is a TanStack Start SSR application, so deploy it as a Render Node web
+service rather than a static site. The repository includes `render.yaml`; the
+equivalent commands are:
+
+```bash
+npm ci --include=dev && npm run build
+npm start
+```
+
+The build intentionally installs dev dependencies because Vite and the
+Lovable TanStack config wrapper are required during compilation. Add the
+server-only values from `.env.example` in Render's environment settings; do
+not commit `.env` files or secrets.
+
 ## 7. OAuth setup
 
 For each platform, add these callback URLs in the provider's developer console:
