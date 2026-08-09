@@ -14,7 +14,7 @@ services:
       - key: SUPABASE_SECRET_KEY
         sync: false
       - key: POSTFLOW_APP_URL
-        sync: false
+        value: https://postflow-web-0iw9.onrender.com
       - key: POSTFLOW_TOKEN_ENCRYPTION_KEY
         sync: false
       - key: SOCIAL_TOKEN_ENC_KEY
@@ -34,7 +34,11 @@ services:
       - key: INSTAGRAM_OAUTH_CLIENT_SECRET
         sync: false
       - key: INSTAGRAM_REDIRECT_URI
-        sync: false
+        value: https://postflow-web-0iw9.onrender.com/api/public/oauth/callback/instagram
+      - key: FACEBOOK_REDIRECT_URI
+        value: https://postflow-web-0iw9.onrender.com/api/public/oauth/callback/facebook
+      - key: PINTEREST_REDIRECT_URI
+        value: https://postflow-web-0iw9.onrender.com/api/public/oauth/callback/pinterest
       - key: SNAPCHAT_OAUTH_CLIENT_ID
         sync: false
       - key: SNAPCHAT_OAUTH_CLIENT_SECRET
@@ -42,19 +46,19 @@ services:
       - key: SNAPCHAT_OAUTH_PUBLIC_CLIENT_ID
         sync: false
       - key: SNAPCHAT_REDIRECT_URI
-        sync: false
+        value: https://postflow-web-0iw9.onrender.com/api/public/oauth/callback/snapchat
       - key: SNAPCHAT_PUBLIC_PROFILE_CLIENT_ID
         sync: false
       - key: SNAPCHAT_PUBLIC_PROFILE_CLIENT_SECRET
         sync: false
       - key: SNAPCHAT_PUBLIC_PROFILE_REDIRECT_URI
-        sync: false
+        value: https://postflow-web-0iw9.onrender.com/api/public/oauth/snapchat-public-profile/callback
       - key: YOUTUBE_OAUTH_CLIENT_ID
         sync: false
       - key: YOUTUBE_OAUTH_CLIENT_SECRET
         sync: false
       - key: YOUTUBE_REDIRECT_URI
-        sync: false
+        value: https://postflow-web-0iw9.onrender.com/api/public/oauth/callback/youtube
       - key: PINTEREST_OAUTH_CLIENT_ID
         sync: false
       - key: PINTEREST_OAUTH_CLIENT_SECRET
