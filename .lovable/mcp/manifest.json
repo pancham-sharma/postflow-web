@@ -1,0 +1,236 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.1",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://pjtpgkzrqnjeyplftztl.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "postflow-your-social-storyteller",
+      "version": "0.1.0",
+      "title": "PostFlow: Your Social Storyteller"
+    },
+    "tools": [
+      {
+        "name": "list_connected_accounts",
+        "title": "List connected accounts",
+        "description": "List the social accounts the signed-in user has connected to PostFlow, with platform, account name, granted scopes and token expiry status. Never returns tokens.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_publish_jobs",
+        "title": "List publish jobs",
+        "description": "List the signed-in user's PostFlow publish jobs, newest first. Optionally filter by status or platform.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "queued",
+                    "running",
+                    "succeeded",
+                    "failed",
+                    "cancelled"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by job status, or null for all."
+            },
+            "platform": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "instagram",
+                    "facebook",
+                    "pinterest",
+                    "youtube",
+                    "snapchat"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by target platform, or null for all."
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 50
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Max rows to return (default 20)."
+            }
+          },
+          "required": [
+            "status",
+            "platform",
+            "limit"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_publish_job",
+        "title": "Get publish job detail",
+        "description": "Get one PostFlow publish job belonging to the signed-in user, including its attempt history and event timeline.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "jobId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "The publish job id."
+            }
+          },
+          "required": [
+            "jobId"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "schedule_post",
+        "title": "Schedule a post",
+        "description": "Queue a PostFlow publish job for one connected platform, optionally scheduled for a future time. The caller must already have that platform connected.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "platform": {
+              "type": "string",
+              "enum": [
+                "instagram",
+                "facebook",
+                "pinterest",
+                "youtube",
+                "snapchat"
+              ],
+              "description": "Target platform for this post."
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Post title shown in PostFlow."
+            },
+            "caption": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Caption text, or null."
+            },
+            "mediaUrl": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uri"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Public URL of the media to publish, or null."
+            },
+            "scheduledFor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 timestamp to publish at, or null to queue immediately."
+            }
+          },
+          "required": [
+            "platform",
+            "title",
+            "caption",
+            "mediaUrl",
+            "scheduledFor"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "cancel_publish_job",
+        "title": "Cancel a publish job",
+        "description": "Cancel one of the signed-in user's queued PostFlow publish jobs so it will not be published.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "jobId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "The queued publish job id to cancel."
+            }
+          },
+          "required": [
+            "jobId"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

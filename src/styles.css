@@ -1,0 +1,276 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * PostFlow design system — strictly two brand colors.
+ *   White     #FFFFFF  oklch(1 0 0)          (was Vanilla #FFEBAF)
+ *   Hunter green #355E3B  oklch(0.4415 0.0735 147.66)
+ * Only opacity variations and gradients of these two are allowed.
+ */
+
+@theme inline {
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 28px;
+  --radius-3xl: 32px;
+  --radius-4xl: 40px;
+
+  --font-sans: "DM Sans", ui-sans-serif, sans-serif;
+  --font-display: "DM Sans", ui-sans-serif, sans-serif;
+
+  --color-vanilla: var(--vanilla);
+  --color-paper: var(--vanilla);
+  --color-moonstone: var(--moonstone);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --shadow-soft: 0 10px 30px -12px oklch(0.4415 0.0735 147.66 / 0.45);
+  --shadow-lift: 0 24px 60px -24px oklch(0.4415 0.0735 147.66 / 0.55);
+}
+:root {
+  --radius: 16px;
+
+  --vanilla: oklch(1 0 0);
+  --moonstone: oklch(0.4415 0.0735 147.66);
+
+  --background: var(--vanilla);
+  --foreground: var(--moonstone);
+  --card: var(--vanilla);
+  --card-foreground: var(--moonstone);
+  --popover: var(--vanilla);
+  --popover-foreground: var(--moonstone);
+  --primary: var(--moonstone);
+  --primary-foreground: var(--vanilla);
+  --secondary: oklch(1 0 0 / 0.6);
+  --secondary-foreground: var(--moonstone);
+  --muted: oklch(0.4415 0.0735 147.66 / 0.08);
+  --muted-foreground: oklch(0.4415 0.0735 147.66 / 0.7);
+  --accent: oklch(0.4415 0.0735 147.66 / 0.14);
+  --accent-foreground: var(--moonstone);
+  --destructive: var(--moonstone);
+  --destructive-foreground: var(--vanilla);
+  --border: oklch(0.4415 0.0735 147.66 / 0.28);
+  --input: oklch(0.4415 0.0735 147.66 / 0.32);
+  --ring: var(--moonstone);
+  --chart-1: var(--moonstone);
+  --chart-2: oklch(0.4415 0.0735 147.66 / 0.7);
+  --chart-3: oklch(0.4415 0.0735 147.66 / 0.45);
+  --chart-4: oklch(0.4415 0.0735 147.66 / 0.28);
+  --chart-5: var(--vanilla);
+  --sidebar: var(--moonstone);
+  --sidebar-foreground: var(--vanilla);
+  --sidebar-primary: var(--vanilla);
+  --sidebar-primary-foreground: var(--moonstone);
+  --sidebar-accent: oklch(1 0 0 / 0.18);
+  --sidebar-accent-foreground: var(--vanilla);
+  --sidebar-border: oklch(1 0 0 / 0.24);
+  --sidebar-ring: var(--vanilla);
+}
+
+.dark {
+  --background: var(--moonstone);
+  --foreground: var(--vanilla);
+  --card: oklch(0.4415 0.0735 147.66);
+  --card-foreground: var(--vanilla);
+  --popover: var(--moonstone);
+  --popover-foreground: var(--vanilla);
+  --primary: var(--vanilla);
+  --primary-foreground: var(--moonstone);
+  --secondary: oklch(0.4415 0.0735 147.66 / 0.6);
+  --secondary-foreground: var(--vanilla);
+  --muted: oklch(1 0 0 / 0.12);
+  --muted-foreground: oklch(1 0 0 / 0.75);
+  --accent: oklch(1 0 0 / 0.18);
+  --accent-foreground: var(--vanilla);
+  --border: oklch(1 0 0 / 0.28);
+  --input: oklch(1 0 0 / 0.32);
+  --ring: var(--vanilla);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background-color: var(--color-moonstone);
+    color: var(--color-vanilla);
+  }
+}
+
+@utility surface-strong {
+  background-color: var(--color-moonstone);
+  color: var(--color-vanilla);
+}
+
+@utility surface-light {
+  background-color: var(--color-vanilla);
+  color: var(--color-moonstone);
+  border: 1px solid oklch(0.4415 0.0735 147.66 / 0.28);
+}
+
+/* Gradient/pattern utilities repaint on every scroll frame when they are
+   applied to many cards at once, so each one is promoted to its own layer and
+   pinned to the element box (no viewport-relative recomputation). */
+@utility mesh-vanilla {
+  background-image:
+    radial-gradient(
+      60% 60% at 15% 10%,
+      oklch(0.4415 0.0735 147.66 / 0.16) 0%,
+      transparent 60%
+    ),
+    radial-gradient(50% 50% at 90% 0%, oklch(0.4415 0.0735 147.66 / 0.12) 0%, transparent 65%);
+  background-attachment: scroll;
+  background-repeat: no-repeat;
+  contain: paint;
+}
+
+@utility hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    oklch(0.4415 0.0735 147.66 / 0.25) 0px,
+    oklch(0.4415 0.0735 147.66 / 0.25) 2px,
+    transparent 2px,
+    transparent 7px
+  );
+  contain: paint;
+}
+
+@utility grid-lines {
+  background-image:
+    linear-gradient(to right, oklch(0.4415 0.0735 147.66 / 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.4415 0.0735 147.66 / 0.1) 1px, transparent 1px);
+  background-size: 48px 48px;
+  contain: paint;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Smooth in-page scrolling (anchor links) */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Scroll reveal for landing sections */
+.reveal {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal.is-visible {
+  animation: reveal-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@keyframes reveal-in {
+  from {
+    opacity: 0.72;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+
+/* Audio studio: circular volume slider thumb */
+input[type="range"].audio-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background-color: var(--color-moonstone);
+  cursor: pointer;
+  border: 2px solid var(--color-background);
+  box-shadow: 0 1px 3px oklch(0.4415 0.0735 147.66 / 0.3);
+}
+
+input[type="range"].audio-volume-slider::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background-color: var(--color-moonstone);
+  cursor: pointer;
+  border: 2px solid var(--color-background);
+  box-shadow: 0 1px 3px oklch(0.4415 0.0735 147.66 / 0.3);
+}
+
+.dark input[type="range"].audio-volume-slider::-webkit-slider-thumb,
+.dark input[type="range"].audio-volume-slider::-moz-range-thumb {
+  background-color: var(--color-vanilla);
+  box-shadow: 0 1px 3px oklch(1 0 0 / 0.3);
+}

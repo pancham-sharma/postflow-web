@@ -1,0 +1,10 @@
+-- Intentionally a no-op.
+--
+-- The original file was a generated snapshot of the already-applied schema,
+-- not a forward migration. Replaying it after the earlier migrations attempted
+-- to recreate enums, constraints, triggers, and policies and made a fresh
+-- project bootstrap fail. The snapshot is preserved at:
+--   supabase/schema-snapshots/20260804183000_baseline_schema.sql
+--
+-- Keeping this timestamped placeholder also preserves compatibility with the
+-- migration history of the original Lovable-connected database.

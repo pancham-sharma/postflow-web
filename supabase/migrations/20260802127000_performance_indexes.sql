@@ -1,0 +1,20 @@
+-- Indexes matching the app's hottest list/dashboard/runner queries.
+CREATE INDEX IF NOT EXISTS idx_publish_jobs_created_at_desc ON public.publish_jobs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_publish_jobs_status_created ON public.publish_jobs (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_publish_jobs_platform_created ON public.publish_jobs (platform, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_publish_jobs_user_created ON public.publish_jobs (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_publish_jobs_workspace_status ON public.publish_jobs (workspace_id, status);
+CREATE INDEX IF NOT EXISTS idx_publish_job_events_job_time ON public.publish_job_events (job_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_publish_job_attempts_job_num ON public.publish_job_attempts (job_id, attempt_number);
+CREATE INDEX IF NOT EXISTS idx_social_connections_workspace ON public.social_connections (workspace_id, platform);
+CREATE INDEX IF NOT EXISTS idx_social_connections_user ON public.social_connections (user_id);
+CREATE INDEX IF NOT EXISTS idx_pjd_due ON public.publishing_job_destinations (status, scheduled_for, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_pjd_workspace ON public.publishing_job_destinations (workspace_id, status);
+CREATE INDEX IF NOT EXISTS idx_pjd_job ON public.publishing_job_destinations (publishing_job_id);
+CREATE INDEX IF NOT EXISTS idx_publishing_attempts_dest ON public.publishing_attempts (job_destination_id, attempt_number);
+CREATE INDEX IF NOT EXISTS idx_social_post_destinations_post ON public.social_post_destinations (post_id);
+CREATE INDEX IF NOT EXISTS idx_social_posts_workspace_created ON public.social_posts (workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_social_post_media_post ON public.social_post_media (post_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON public.notifications (user_id, read_at, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created ON public.admin_audit_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON public.workspace_members (user_id, created_at);

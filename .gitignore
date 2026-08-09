@@ -1,0 +1,69 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment & secrets — never commit
+.env
+.env.*
+!.env.example
+*.env
+.envrc
+.dev.vars*
+secrets.json
+credentials.json
+service-account*.json
+client_secret_*.json
+*googleusercontent*.json
+oauth-client*.json
+
+# Keys & certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+*.asc
+*.gpg
+
+# Local tooling / caches
+.cache/
+.temp/
+.tmp/
+coverage/
+.eslintcache
+.supabase/
+supabase/.temp/
+.bun/
+.turbo/
