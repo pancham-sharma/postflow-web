@@ -10,7 +10,6 @@ import {
   preflightConnect,
   refreshConnection,
   startPlatformConnect,
-  startInstagramOAuth,
   getOAuthPlatformStatus,
   testConnection,
 } from "@/lib/social-connections.functions";
@@ -27,9 +26,16 @@ export const Route = createFileRoute("/_authenticated/app/accounts")({
   head: () => ({
     meta: [
       { title: "Social Accounts — PostFlow" },
-      { name: "description", content: "Connect, reconnect or disconnect Instagram, Facebook, Pinterest, YouTube and Snapchat accounts." },
+      {
+        name: "description",
+        content:
+          "Connect, reconnect or disconnect Instagram, Facebook, Pinterest, YouTube and Snapchat accounts.",
+      },
       { property: "og:title", content: "Social Accounts — PostFlow" },
-      { property: "og:description", content: "Token expiry, permission status and last sync for every connected account." },
+      {
+        property: "og:description",
+        content: "Token expiry, permission status and last sync for every connected account.",
+      },
     ],
   }),
   component: AccountsPage,
@@ -62,7 +68,15 @@ const ERROR_SCREENS: Record<string, { title: string; hint: string }> = {
   },
   token_exchange_failed: {
     title: "Token exchange failed",
-    hint: "We reached the provider but it declined to issue a token. Retry once; if it repeats, run the pre-flight check to confirm the app credentials and redirect URI.",
+    hint: "The provider declined to issue a token. Check the developer app credentials and that the callback URL shown by the pre-flight check is registered exactly.",
+  },
+  account_discovery_failed: {
+    title: "Account details unavailable",
+    hint: "Authorization succeeded, but the platform did not let PostFlow read the connected account. Confirm the account type and the permissions granted to the app, then reconnect.",
+  },
+  connection_storage_failed: {
+    title: "Account could not be saved",
+    hint: "Authorization succeeded, but PostFlow could not save the connection. Retry the connection; if it repeats, check the server logs for a connection-storage failure.",
   },
   redirect_uri_mismatch: {
     title: "Redirect URI mismatch",
@@ -160,16 +174,20 @@ function AccountsPage() {
   const doTest = useServerFn(testConnection);
   const doHealth = useServerFn(checkConnectionHealthFn);
   const doPreflight = useServerFn(preflightConnect);
-  const startInstagram = useServerFn(startInstagramOAuth);
   const fetchInstagramStatus = useServerFn(getOAuthPlatformStatus);
   const [pending, setPending] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<{ platform: SocialPlatform; url: string } | null>(null);
   const [callbackError, setCallbackError] = useState<CallbackError | null>(null);
-  const [preflight, setPreflight] = useState<{ platform: SocialPlatform; result: Preflight } | null>(null);
+  const [preflight, setPreflight] = useState<{
+    platform: SocialPlatform;
+    result: Preflight;
+  } | null>(null);
   const [preflightBusy, setPreflightBusy] = useState<SocialPlatform | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<SocialConnection | null>(null);
   const [showSnapchatHelp, setShowSnapchatHelp] = useState(false);
-  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message: string; at: string }>>({});
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; message: string; at: string }>
+  >({});
 
   const { data: instagramStatus } = useQuery({
     queryKey: ["oauth-status", "instagram"],
@@ -177,7 +195,11 @@ function AccountsPage() {
     staleTime: 60_000,
   });
 
-  const { data: connections = [], isLoading, error: connectionsError } = useQuery<SocialConnection[]>({
+  const {
+    data: connections = [],
+    isLoading,
+    error: connectionsError,
+  } = useQuery<SocialConnection[]>({
     queryKey: ["social-connections"],
     queryFn: () => fetchConnections(),
     staleTime: 60_000,
@@ -227,7 +249,6 @@ function AccountsPage() {
     setShowSnapchatHelp(true);
   }, []);
 
-
   const isFramed = () => typeof window !== "undefined" && window.top !== window.self;
 
   /**
@@ -238,21 +259,6 @@ function AccountsPage() {
    */
   const redirectToProvider = useCallback(
     async (platform: SocialPlatform, destination: Window = window) => {
-      if (platform === "instagram") {
-        // Instagram API with Instagram Login: the server owns the app id, the
-        // redirect URI (from POSTFLOW_APP_URL) and the single-use state.
-        const returnPath = `${window.location.pathname}${window.location.search}`;
-        const { authorizeUrl } = await startInstagram({
-          data: { returnPath, origin: window.location.origin },
-        });
-        const target = new URL(authorizeUrl);
-        const allowedInstagramHosts = ["www.instagram.com", "instagram.com"];
-        if (target.protocol !== "https:" || !allowedInstagramHosts.includes(target.hostname)) {
-          throw new Error("Invalid Instagram authorization URL.");
-        }
-        destination.location.assign(target.toString());
-        return;
-      }
       const check = (await doPreflight({
         data: { platform, origin: window.location.origin },
       })) as Preflight;
@@ -282,7 +288,7 @@ function AccountsPage() {
       }
       destination.location.assign(target.toString());
     },
-    [doPreflight, startConnect, startInstagram],
+    [doPreflight, startConnect],
   );
 
   const connect = useCallback(
@@ -427,7 +433,6 @@ function AccountsPage() {
   }));
   const notConnectedCount = available.filter((p) => !p.alreadyConnected).length;
 
-
   return (
     <div className="space-y-8">
       <div>
@@ -451,7 +456,10 @@ function AccountsPage() {
         <section className="rounded-2xl border border-destructive/50 p-4 text-sm" role="alert">
           <h2 className="font-semibold">Social accounts could not be loaded</h2>
           <p className="mt-1 text-muted-foreground">
-            {clientErrorMessage(connectionsError, "The account service is temporarily unavailable. Please try again shortly.")}
+            {clientErrorMessage(
+              connectionsError,
+              "The account service is temporarily unavailable. Please try again shortly.",
+            )}
           </p>
           <button
             type="button"
@@ -474,8 +482,8 @@ function AccountsPage() {
           </p>
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
             <li>
-              Create a Meta app with <strong>Instagram API with Instagram Login</strong> and add
-              the scopes: {instagramStatus.scopes.join(", ")}.
+              Create a Meta app with <strong>Instagram API with Instagram Login</strong> and add the
+              scopes: {instagramStatus.scopes.join(", ")}.
             </li>
             <li>
               Register this exact redirect URI:{" "}
@@ -496,7 +504,6 @@ function AccountsPage() {
         </div>
       ) : null}
 
-
       {callbackError && (
         <section className="rounded-2xl border-2 border-primary p-5 text-sm">
           <div className="flex items-start gap-3">
@@ -512,8 +519,12 @@ function AccountsPage() {
               </p>
               {callbackError.platform === "snapchat" && (
                 <SnapchatPortalHelp
-                  redirectUri={preflight?.platform === "snapchat" ? preflight.result.redirectUri : undefined}
-                  clientIdPrefix={preflight?.platform === "snapchat" ? preflight.result.clientIdPrefix : null}
+                  redirectUri={
+                    preflight?.platform === "snapchat" ? preflight.result.redirectUri : undefined
+                  }
+                  clientIdPrefix={
+                    preflight?.platform === "snapchat" ? preflight.result.clientIdPrefix : null
+                  }
                 />
               )}
               <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
@@ -605,8 +616,12 @@ function AccountsPage() {
                 configuration — PostFlow's credentials are accepted by Snapchat's token endpoint.
               </p>
               <SnapchatPortalHelp
-                redirectUri={preflight?.platform === "snapchat" ? preflight.result.redirectUri : undefined}
-                clientIdPrefix={preflight?.platform === "snapchat" ? preflight.result.clientIdPrefix : null}
+                redirectUri={
+                  preflight?.platform === "snapchat" ? preflight.result.redirectUri : undefined
+                }
+                clientIdPrefix={
+                  preflight?.platform === "snapchat" ? preflight.result.clientIdPrefix : null
+                }
               />
               <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
                 <button
@@ -716,7 +731,10 @@ function AccountsPage() {
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-muted-foreground">Account ID</dt>
-                    <dd className="max-w-[55%] truncate font-mono font-medium" title={acc.accountId}>
+                    <dd
+                      className="max-w-[55%] truncate font-mono font-medium"
+                      title={acc.accountId}
+                    >
                       {acc.accountId}
                     </dd>
                   </div>
@@ -778,7 +796,9 @@ function AccountsPage() {
                       <RefreshCw
                         className={cn(
                           "size-3.5",
-                          refreshMutation.isPending && refreshMutation.variables === acc.id && "animate-spin",
+                          refreshMutation.isPending &&
+                            refreshMutation.variables === acc.id &&
+                            "animate-spin",
                         )}
                         aria-hidden
                       />
@@ -801,7 +821,9 @@ function AccountsPage() {
                     <PlugZap
                       className={cn(
                         "size-3.5",
-                        testMutation.isPending && testMutation.variables === acc.id && "animate-pulse",
+                        testMutation.isPending &&
+                          testMutation.variables === acc.id &&
+                          "animate-pulse",
                       )}
                       aria-hidden
                     />
@@ -838,9 +860,7 @@ function AccountsPage() {
           className="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4"
         >
           <div className="w-full max-w-sm rounded-2xl border border-border bg-background p-5 text-sm">
-            <h2 className="text-base font-bold">
-              Disconnect {confirmDisconnect.accountName}?
-            </h2>
+            <h2 className="text-base font-bold">Disconnect {confirmDisconnect.accountName}?</h2>
             <p className="mt-2 text-muted-foreground">
               Scheduled posts targeting this {platformMap[confirmDisconnect.platform]?.name} account
               will stop publishing. Stored tokens are deleted immediately; you can reconnect at any

@@ -10,6 +10,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test:oauth": "node --experimental-strip-types --test src/lib/oauth-provider-error.server.test.ts",
     "format": "prettier --write .",
     "security:scan": "node scripts/check-secrets.mjs --tracked",
     "security:staged": "node scripts/check-secrets.mjs --staged"

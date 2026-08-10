@@ -8,6 +8,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { isSocialPlatform } from "@/lib/social-platforms";
 import { callbackUrl, resolvePublicOrigin } from "@/lib/public-origin";
+import { parseOAuthCallbackInput } from "@/lib/oauth-callback-input";
 
 export const Route = createFileRoute("/api/public/oauth/callback/$platform")({
   server: {
@@ -22,12 +23,14 @@ export const Route = createFileRoute("/api/public/oauth/callback/$platform")({
 
         const { postflowAppUrlOrNull, providerCallbackUrl, providerRedirectUriOverride } =
           await import("@/lib/app-url.server");
-        const { oauthErrorMessage, OAUTH_ERROR_MESSAGES, classifyOAuthError } = await import(
-          "@/lib/oauth-errors"
-        );
-        const { returnPathWithResult, DEFAULT_OAUTH_RETURN_PATH } = await import(
-          "@/lib/oauth-return-path"
-        );
+        const {
+          oauthErrorMessage,
+          oauthErrorMessageForCode,
+          OAUTH_ERROR_MESSAGES,
+          classifyOAuthError,
+        } = await import("@/lib/oauth-errors");
+        const { returnPathWithResult, DEFAULT_OAUTH_RETURN_PATH } =
+          await import("@/lib/oauth-return-path");
 
         const appUrl = postflowAppUrlOrNull();
         let base = appUrl ?? resolvePublicOrigin(request);
@@ -53,29 +56,37 @@ export const Route = createFileRoute("/api/public/oauth/callback/$platform")({
             connect_platform: platform,
           });
 
-        const providerError =
-          url.searchParams.get("error_description") ?? url.searchParams.get("error");
-        if (providerError) {
-          console.error(`[oauth:${platform}] provider returned an error`);
-          const code = url.searchParams.get("error") === "access_denied"
-            ? "access_denied"
-            : classifyOAuthError(providerError);
-          return fail(code, oauthErrorMessage(providerError));
+        const input = parseOAuthCallbackInput(url.searchParams);
+        if (!input.ok && input.reason === "provider_error") {
+          const { oauthFailureDetails } = await import("@/lib/oauth-provider-error.server");
+          const details = oauthFailureDetails(
+            {
+              platform,
+              stage: "authorization_response",
+              endpoint: `${url.origin}${url.pathname}`,
+            },
+            null,
+            { error: { code: input.providerErrorCode, error_message: input.providerError } },
+          );
+          console.error(`[oauth:${platform}] authorization_response failed`, details);
+          const callbackCode =
+            input.providerErrorCode === "access_denied"
+              ? "access_denied"
+              : classifyOAuthError(input.providerError);
+          return fail(callbackCode, oauthErrorMessage(input.providerError));
         }
 
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state");
-        if (!code || !state) {
+        if (!input.ok) {
           console.error(`[oauth:${platform}] callback missing parameters`, {
-            hasCode: Boolean(code),
-            hasState: Boolean(state),
+            hasCode: input.reason !== "missing_code",
+            hasState: input.reason !== "missing_state",
           });
           return fail(
             "invalid_callback",
-            `Missing ${!code ? "authorization code" : "state"} in the ${platform} callback. Please start the connection again.`,
+            `Missing ${input.reason === "missing_code" ? "authorization code" : "state"} in the ${platform} callback. Please start the connection again.`,
           );
         }
-
+        const { code, state } = input;
 
         // When the flow started through /api/public/oauth/connect/:platform the
         // raw state is also in an HTTP-only cookie. Compare timing-safely.
@@ -88,7 +99,14 @@ export const Route = createFileRoute("/api/public/oauth/callback/$platform")({
           .join("=");
         if (cookieState) {
           const { timingSafeEqual } = await import("node:crypto");
-          const a = Buffer.from(decodeURIComponent(cookieState));
+          let decodedCookieState: string;
+          try {
+            decodedCookieState = decodeURIComponent(cookieState);
+          } catch {
+            console.error(`[oauth:${platform}] malformed state cookie`);
+            return fail("state_invalid", OAUTH_ERROR_MESSAGES.state_invalid);
+          }
+          const a = Buffer.from(decodedCookieState);
           const b = Buffer.from(state);
           if (a.length !== b.length || !timingSafeEqual(a, b)) {
             console.error(`[oauth:${platform}] state cookie mismatch`);
@@ -96,9 +114,8 @@ export const Route = createFileRoute("/api/public/oauth/callback/$platform")({
           }
         }
 
-        const { consumeOAuthState, saveConnection } = await import(
-          "@/lib/social-connections.server"
-        );
+        const { consumeOAuthState, saveConnection } =
+          await import("@/lib/social-connections.server");
         const pending = await consumeOAuthState(state, platform);
         if (!pending.ok) {
           return fail(pending.reason, OAUTH_ERROR_MESSAGES[pending.reason]);
@@ -110,9 +127,8 @@ export const Route = createFileRoute("/api/public/oauth/callback/$platform")({
         if (pending.returnOrigin) base = pending.returnOrigin;
 
         try {
-          const { exchangeCode, providers, AccountNotProfessionalError } = await import(
-            "@/lib/social-oauth.server"
-          );
+          const { exchangeCode, providers, AccountNotProfessionalError } =
+            await import("@/lib/social-oauth.server");
           // Byte-identical to the URI used to start the flow.
           const redirectUri =
             providerRedirectUriOverride(platform) ??
@@ -134,17 +150,39 @@ export const Route = createFileRoute("/api/public/oauth/callback/$platform")({
           }
           if (!identity.accountId) throw new Error("Provider returned no account id");
 
-          await saveConnection(
-            pending.userId,
-            platform,
-            identity,
-            tokens,
-            pending.workspaceId,
-          );
+          try {
+            await saveConnection(pending.userId, platform, identity, tokens, pending.workspaceId);
+          } catch (error) {
+            // A database failure is distinct from a provider failure; no raw
+            // database payload is logged because it can contain account data.
+            console.error(`[oauth:${platform}] connection_storage failed`, {
+              platform,
+              stage: "connection_storage",
+              errorType: error instanceof Error ? error.name : "unknown_error",
+            });
+            return fail(
+              "connection_storage_failed",
+              oauthErrorMessageForCode("connection_storage_failed"),
+            );
+          }
           return redirectTo({ oauth: "success", platform, connected: platform });
         } catch (error) {
+          const { OAuthProviderError } = await import("@/lib/oauth-provider-error.server");
+          if (error instanceof OAuthProviderError) {
+            const callbackCode =
+              error.details.stage === "account_discovery"
+                ? "account_discovery_failed"
+                : classifyOAuthError(
+                    [error.details.errorCode, error.details.errorType, error.details.errorMessage]
+                      .filter(Boolean)
+                      .join(" "),
+                  );
+            return fail(callbackCode, oauthErrorMessageForCode(callbackCode));
+          }
           // Full detail stays in server logs; the browser only sees a safe code.
-          console.error(`[oauth:${platform}] callback failed`, error);
+          console.error(`[oauth:${platform}] callback failed`, {
+            errorType: error instanceof Error ? error.name : "unknown_error",
+          });
           const raw = error instanceof Error ? error.message : null;
           return fail(classifyOAuthError(raw), oauthErrorMessage(raw));
         }

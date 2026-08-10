@@ -2,6 +2,13 @@
 import { createHash } from "node:crypto";
 import type { SocialPlatform } from "./social-platforms";
 import { facebookOAuthScopes } from "./meta-scopes.server";
+import {
+  OAuthProviderError,
+  oauthFailureDetails,
+  oauthJsonOrThrow,
+  oauthTransportError,
+  type OAuthFailureStage,
+} from "./oauth-provider-error.server";
 
 export type TokenSet = {
   accessToken: string;
@@ -56,22 +63,50 @@ export class OAuthConfigurationError extends Error {
   }
 }
 
+type ProviderJson = {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number | string;
+  scope?: string;
+  id?: string | number;
+  user_id?: string | number;
+  username?: string;
+  account_type?: string;
+  profile_picture_url?: string;
+  business_name?: string;
+  profile_image?: string;
+  customUrl?: string;
+  title?: string;
+  externalId?: string;
+  displayName?: string;
+  data?: ProviderJson;
+  items?: ProviderJson[];
+  picture?: { data?: ProviderJson };
+  snippet?: ProviderJson;
+  thumbnails?: ProviderJson;
+  default?: ProviderJson;
+  me?: ProviderJson;
+};
 
-async function jsonOrThrow(res: Response, label: string): Promise<any> {
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${label} failed [${res.status}]: ${text}`);
+async function providerJson(
+  platform: SocialPlatform,
+  stage: OAuthFailureStage,
+  endpoint: string,
+  init?: RequestInit,
+): Promise<ProviderJson> {
+  const context = { platform, stage, endpoint };
   try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`${label} returned invalid JSON: ${text.slice(0, 200)}`);
+    return await oauthJsonOrThrow<ProviderJson>(await fetch(endpoint, init), context);
+  } catch (error) {
+    if (error instanceof OAuthProviderError) throw error;
+    throw oauthTransportError(context);
   }
 }
 
-async function getJson(url: string, accessToken: string, label: string) {
-  return jsonOrThrow(
-    await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } }),
-    label,
-  );
+async function getJson(platform: SocialPlatform, url: string, accessToken: string) {
+  return providerJson(platform, "account_discovery", url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
 }
 
 export const providers: Record<SocialPlatform, ProviderConfig> = {
@@ -90,14 +125,14 @@ export const providers: Record<SocialPlatform, ProviderConfig> = {
     extraAuthorizeParams: { enable_fb_login: "0", force_authentication: "1" },
     supportsRefresh: true,
     identity: async (token) => {
-      const me = await jsonOrThrow(
-        await fetch(
-          `https://graph.instagram.com/v21.0/me?fields=user_id,username,account_type,profile_picture_url&access_token=${encodeURIComponent(token)}`,
-        ),
-        "Instagram profile",
+      const me = await providerJson(
+        "instagram",
+        "account_discovery",
+        `https://graph.instagram.com/v21.0/me?fields=user_id,username,account_type,profile_picture_url&access_token=${encodeURIComponent(token)}`,
       );
       const accountType = String(me.account_type ?? "").toUpperCase();
-      const eligible = accountType === "BUSINESS" || accountType === "CREATOR" || accountType === "MEDIA_CREATOR";
+      const eligible =
+        accountType === "BUSINESS" || accountType === "CREATOR" || accountType === "MEDIA_CREATOR";
       if (accountType && !eligible) {
         throw new AccountNotProfessionalError(
           "This Instagram account is not eligible for API publishing. Switch it to a Business or Creator account and try again.",
@@ -119,21 +154,16 @@ export const providers: Record<SocialPlatform, ProviderConfig> = {
     // platform is not configured with "Invalid platform app".
     authorizeUrl: "https://www.facebook.com/dialog/oauth",
     tokenUrl: "https://graph.facebook.com/v21.0/oauth/access_token",
-    scopes: [
-      "pages_show_list",
-      "pages_read_engagement",
-      "business_management",
-    ],
+    scopes: ["pages_show_list", "pages_read_engagement", "business_management"],
     scopeSeparator: ",",
     clientIdEnv: "META_OAUTH_CLIENT_ID",
     clientSecretEnv: "META_OAUTH_CLIENT_SECRET",
     supportsRefresh: false,
     identity: async (token) => {
-      const me = await jsonOrThrow(
-        await fetch(
-          `https://graph.facebook.com/v21.0/me?fields=id,name,picture&access_token=${encodeURIComponent(token)}`,
-        ),
-        "Facebook profile",
+      const me = await providerJson(
+        "facebook",
+        "account_discovery",
+        `https://graph.facebook.com/v21.0/me?fields=id,name,picture&access_token=${encodeURIComponent(token)}`,
       );
       return {
         accountId: String(me.id),
@@ -147,13 +177,7 @@ export const providers: Record<SocialPlatform, ProviderConfig> = {
     label: "Pinterest",
     authorizeUrl: "https://www.pinterest.com/oauth/",
     tokenUrl: "https://api.pinterest.com/v5/oauth/token",
-    scopes: [
-      "user_accounts:read",
-      "boards:read",
-      "boards:write",
-      "pins:read",
-      "pins:write",
-    ],
+    scopes: ["user_accounts:read", "boards:read", "boards:write", "pins:read", "pins:write"],
     scopeSeparator: ",",
     clientIdEnv: "PINTEREST_OAUTH_CLIENT_ID",
     clientSecretEnv: "PINTEREST_OAUTH_CLIENT_SECRET",
@@ -161,11 +185,7 @@ export const providers: Record<SocialPlatform, ProviderConfig> = {
     tokenAuthBasic: true,
     supportsRefresh: true,
     identity: async (token) => {
-      const me = await getJson(
-        "https://api.pinterest.com/v5/user_account",
-        token,
-        "Pinterest profile",
-      );
+      const me = await getJson("pinterest", "https://api.pinterest.com/v5/user_account", token);
       return {
         accountId: String(me.id ?? me.username),
         accountName: me.business_name || me.username || "Pinterest account",
@@ -192,9 +212,9 @@ export const providers: Record<SocialPlatform, ProviderConfig> = {
     supportsRefresh: true,
     identity: async (token) => {
       const data = await getJson(
+        "youtube",
         "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
         token,
-        "YouTube channel",
       );
       const channel = data.items?.[0];
       if (!channel) throw new Error("No YouTube channel found for this Google account");
@@ -222,20 +242,18 @@ export const providers: Record<SocialPlatform, ProviderConfig> = {
     tokenAuthBasic: true,
     supportsRefresh: true,
     identity: async (token) => {
+      type SnapchatIdentity = { externalId?: string; displayName?: string };
       const ask = async (query: string) =>
-        jsonOrThrow(
-          await fetch("https://kit.snapchat.com/v1/me", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ query }),
-          }),
-          "Snapchat profile",
-        );
+        providerJson("snapchat", "account_discovery", "https://kit.snapchat.com/v1/me", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query }),
+        });
       // externalId needs its own approved scope; fall back to display name only.
-      let me: any = {};
+      let me: SnapchatIdentity = {};
       try {
         me = (await ask("{me{externalId displayName}}")).data?.me ?? {};
       } catch {
@@ -288,7 +306,10 @@ const ENV_ALIASES: Record<string, string[]> = {
 export function providerCredentials(platform: SocialPlatform) {
   const config = providers[platform];
   const clean = (raw: string | undefined) =>
-    (raw ?? "").trim().replace(/^['"]|['"]$/g, "").trim();
+    (raw ?? "")
+      .trim()
+      .replace(/^['"]|['"]$/g, "")
+      .trim();
   const readEnv = (name: string) => {
     for (const candidate of [name, ...(ENV_ALIASES[name] ?? [])]) {
       const value = clean(process.env[candidate]);
@@ -344,7 +365,6 @@ export function providerConfigDiagnostics(platform: SocialPlatform, redirectUri:
   };
 }
 
-
 function basicHeader(clientId: string, clientSecret: string) {
   return `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
 }
@@ -352,6 +372,7 @@ function basicHeader(clientId: string, clientSecret: string) {
 async function postToken(
   platform: SocialPlatform,
   body: Record<string, string>,
+  stage: OAuthFailureStage = "token_exchange",
 ): Promise<TokenSet> {
   const { config, clientId, clientSecret } = providerCredentials(platform);
   const params = new URLSearchParams(body);
@@ -369,36 +390,26 @@ async function postToken(
     params.set(config.clientIdParam, clientId);
   }
 
-  const response = await fetch(config.tokenUrl, { method: "POST", headers, body: params });
-  // Safe diagnostics only: status + provider error body. Never the secret,
-  // authorization code, code_verifier, access token or refresh token.
-  if (!response.ok) {
-    let errorBody = "";
-    try {
-      errorBody = (await response.clone().text()).slice(0, 800);
-    } catch {
-      errorBody = "<unreadable>";
-    }
-    console.error(`[oauth:${platform}] token exchange failed`, {
-      endpoint: config.tokenUrl,
-      status: response.status,
-      clientIdPrefix: clientId.slice(0, 8),
-      redirectUri: body["redirect_uri"],
-      providerError: errorBody,
-    });
-  }
-  const payload = await jsonOrThrow(response, `${config.label} token exchange`);
+  const payload = await providerJson(platform, stage, config.tokenUrl, {
+    method: "POST",
+    headers,
+    body: params,
+  });
 
   const accessToken = payload.access_token ?? payload.data?.access_token;
   if (!accessToken) {
-    throw new Error(`${config.label} token exchange returned no access token`);
+    const details = oauthFailureDetails({ platform, stage, endpoint: config.tokenUrl }, 200, {
+      error_type: "malformed_provider_response",
+      error_message: "The provider response did not include an access token.",
+    });
+    console.error(`[oauth:${platform}] ${stage} failed`, details);
+    throw new OAuthProviderError(details);
   }
   const scopeValue: string = payload.scope ?? payload.data?.scope ?? "";
   return {
     accessToken,
     refreshToken: payload.refresh_token ?? payload.data?.refresh_token ?? null,
-    expiresInSeconds:
-      Number(payload.expires_in ?? payload.data?.expires_in ?? 0) || null,
+    expiresInSeconds: Number(payload.expires_in ?? payload.data?.expires_in ?? 0) || null,
     scopes: scopeValue ? scopeValue.split(/[\s,]+/).filter(Boolean) : config.scopes,
   };
 }
@@ -420,11 +431,10 @@ export async function exchangeCode(
   // Instagram/Facebook short-lived tokens are swapped for long-lived ones.
   if (platform === "instagram") {
     const { clientSecret } = providerCredentials("instagram");
-    const long = await jsonOrThrow(
-      await fetch(
-        `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(clientSecret)}&access_token=${encodeURIComponent(tokens.accessToken)}`,
-      ),
-      "Instagram long-lived token",
+    const long = await providerJson(
+      "instagram",
+      "token_upgrade",
+      `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(clientSecret)}&access_token=${encodeURIComponent(tokens.accessToken)}`,
     );
     return {
       ...tokens,
@@ -434,11 +444,10 @@ export async function exchangeCode(
   }
   if (platform === "facebook") {
     const { clientId, clientSecret } = providerCredentials("facebook");
-    const long = await jsonOrThrow(
-      await fetch(
-        `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}&fb_exchange_token=${encodeURIComponent(tokens.accessToken)}`,
-      ),
-      "Facebook long-lived token",
+    const long = await providerJson(
+      "facebook",
+      "token_upgrade",
+      `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}&fb_exchange_token=${encodeURIComponent(tokens.accessToken)}`,
     );
     // Store only what Meta actually returned — never an invented expiry.
     return {
@@ -459,11 +468,10 @@ export async function refreshTokens(
 
   // Long-lived Meta tokens are extended, not refreshed.
   if (platform === "instagram") {
-    const data = await jsonOrThrow(
-      await fetch(
-        `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(accessToken)}`,
-      ),
-      "Instagram token refresh",
+    const data = await providerJson(
+      "instagram",
+      "token_upgrade",
+      `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(accessToken)}`,
     );
     return {
       accessToken: data.access_token,
@@ -473,11 +481,10 @@ export async function refreshTokens(
     };
   }
   if (platform === "facebook") {
-    const data = await jsonOrThrow(
-      await fetch(
-        `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}&fb_exchange_token=${encodeURIComponent(accessToken)}`,
-      ),
-      "Facebook token refresh",
+    const data = await providerJson(
+      "facebook",
+      "token_upgrade",
+      `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}&fb_exchange_token=${encodeURIComponent(accessToken)}`,
     );
     return {
       accessToken: data.access_token,
@@ -490,10 +497,14 @@ export async function refreshTokens(
   if (!refreshToken) {
     throw new Error(`${config.label} has no refresh token — reconnect the account.`);
   }
-  return postToken(platform, {
-    grant_type: "refresh_token",
-    refresh_token: refreshToken,
-  });
+  return postToken(
+    platform,
+    {
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    },
+    "token_upgrade",
+  );
 }
 
 /**

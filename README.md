@@ -158,8 +158,8 @@ npm start
 
 The build intentionally installs dev dependencies because Vite and the
 Lovable TanStack config wrapper are required during compilation. Add the
-server-only values from `.env.example` in Render's environment settings; do
-not commit `.env` files or secrets.
+server-only values listed in **Secrets and keys** below in Render's environment
+settings; do not create or commit `.env` / `.env.example` files or secrets.
 
 ## 7. OAuth setup
 
@@ -508,9 +508,9 @@ the app itself returns to `/auth/callback` after Supabase verifies the login.
 > Secrets are never kept in a committed `.env`. They are stored through Lovable's
 > secret manager and injected as environment variables at runtime.
 
-Use `.env.example` for variable names and placeholders. Before committing,
-run `npm run security:scan`; the repository also runs a staged-file hook and
-a full-history Gitleaks GitHub Actions workflow.
+Use the secret-name table above when configuring local development or Render.
+Before committing, run `npm run security:scan`; the repository also runs a
+staged-file hook and a full-history Gitleaks GitHub Actions workflow.
 
 ---
 

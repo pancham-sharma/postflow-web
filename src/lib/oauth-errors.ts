@@ -17,19 +17,19 @@ export type OAuthErrorCode =
   | "app_not_approved"
   | "code_expired"
   | "token_exchange_failed"
+  | "account_discovery_failed"
+  | "connection_storage_failed"
   | "state_invalid"
   | "unknown";
 
 export const OAUTH_ERROR_MESSAGES: Record<OAuthErrorCode, string> = {
-  configuration_missing: "Instagram connection is not configured.",
-  invalid_platform_app:
-    "The configured Instagram App ID is not enabled for Instagram API with Instagram Login.",
-  invalid_scope:
-    "The Instagram authorization request contains an unsupported permission.",
-  access_denied: "Instagram authorization was cancelled or denied.",
+  configuration_missing: "This platform connection is not configured.",
+  invalid_platform_app: "The configured app is not enabled for this platform's OAuth product.",
+  invalid_scope: "The authorization request contains an unsupported permission.",
+  access_denied: "Authorization was cancelled or denied.",
   account_not_professional:
     "Switch this Instagram account to Business or Creator before connecting it.",
-  state_expired: "The Instagram connection request expired. Start again.",
+  state_expired: "The connection request expired. Start again.",
   state_reused: "This Instagram authorization request has already been used.",
   app_review_required:
     "The Instagram app requires tester access or Meta approval before this account can connect.",
@@ -37,15 +37,17 @@ export const OAUTH_ERROR_MESSAGES: Record<OAuthErrorCode, string> = {
     "This platform connection is not configured yet. Add the real app ID and app secret in backend secrets.",
   app_not_found:
     "The platform could not find the configured developer application. Check the app ID and that the app is active.",
-  redirect_uri_mismatch:
-    "The callback URL does not match the URL registered for this app.",
+  redirect_uri_mismatch: "The callback URL does not match the URL registered for this app.",
   permission_denied: "Authorization was cancelled or denied.",
-  app_not_approved:
-    "This developer application is not approved for the requested API access yet.",
+  app_not_approved: "This developer application is not approved for the requested API access yet.",
   code_expired:
     "The authorization expired before it could be completed. Start the connection again.",
   token_exchange_failed:
-    "Authorization could not be completed. Please try again.",
+    "The platform did not issue a token. Verify the app credentials and exact callback URL.",
+  account_discovery_failed:
+    "The platform authorized the connection but PostFlow could not read the account. Verify the account type and granted permissions.",
+  connection_storage_failed:
+    "The account was authorized but could not be saved. Please try connecting it again.",
   state_invalid: "This authorization link expired. Try again.",
   unknown: "We couldn't complete the connection. Please try again.",
 };
@@ -87,11 +89,7 @@ export function classifyOAuthError(raw: string | null | undefined): OAuthErrorCo
     return "redirect_uri_mismatch";
   }
 
-  if (
-    text.includes("access_denied") ||
-    text.includes("denied") ||
-    text.includes("cancel")
-  ) {
+  if (text.includes("access_denied") || text.includes("denied") || text.includes("cancel")) {
     return "permission_denied";
   }
   if (text.includes("not approved") || text.includes("trial") || text.includes("scope")) {
@@ -111,4 +109,9 @@ export function classifyOAuthError(raw: string | null | undefined): OAuthErrorCo
 
 export function oauthErrorMessage(raw: string | null | undefined): string {
   return OAUTH_ERROR_MESSAGES[classifyOAuthError(raw)];
+}
+
+/** Returns a safe message for an error already classified by the callback. */
+export function oauthErrorMessageForCode(code: OAuthErrorCode): string {
+  return OAUTH_ERROR_MESSAGES[code];
 }
