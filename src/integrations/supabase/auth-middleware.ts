@@ -14,7 +14,7 @@ function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
 }
 
-function createSupabaseFetch(supabaseKey: string, timeoutMs = 10_000): typeof fetch {
+function createSupabaseFetch(supabaseKey: string, timeoutMs = 10_000, userToken?: string): typeof fetch {
   return async (input, init) => {
     const headers = new Headers(
       typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined,
@@ -24,11 +24,13 @@ function createSupabaseFetch(supabaseKey: string, timeoutMs = 10_000): typeof fe
       new Headers(init.headers).forEach((value, key) => headers.set(key, value));
     }
 
-    // New Supabase API keys are opaque strings, not bearer JWTs.
-    if (
+    if (userToken) {
+      headers.set("Authorization", `Bearer ${userToken}`);
+    } else if (
       isNewSupabaseApiKey(supabaseKey) &&
       headers.get("Authorization") === `Bearer ${supabaseKey}`
     ) {
+      // New Supabase API keys are opaque strings, not bearer JWTs.
       headers.delete("Authorization");
     }
 
@@ -170,7 +172,7 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
 
     const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       global: {
-        fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY),
+        fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY, 10_000, token),
         headers: { Authorization: `Bearer ${token}` },
       },
       auth: { storage: undefined, persistSession: false, autoRefreshToken: false },

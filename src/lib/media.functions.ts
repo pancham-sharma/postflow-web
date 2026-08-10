@@ -238,13 +238,8 @@ export const registerMediaAsset = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => registerInput.parse(data))
   .handler(async ({ data, context }) => {
     const { resolveWorkspaceId } = await import("@/lib/social-connections.server");
-    // supabaseAdmin: userId + workspaceId are already server-verified by
-    // requireSupabaseAuth (JWT validation) and resolveWorkspaceId (admin DB lookup).
-    // Using admin here avoids auth.uid() resolution issues in the PostgREST
-    // server-to-server path that cause the RLS violation.
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const workspaceId = await resolveWorkspaceId(context.userId);
-    const { userId } = context;
+    const { supabase, userId } = context;
 
     const kind = (ALLOWED_VIDEO_MIME as readonly string[]).includes(data.mimeType)
       ? "video"
@@ -260,28 +255,28 @@ export const registerMediaAsset = createServerFn({ method: "POST" })
 
     // Verify the file's real signature — a renamed script/SVG/HTML payload with an
     // allowed mime type is rejected and removed from storage.
-    const head = await supabaseAdmin.storage.from(MEDIA_BUCKET).download(data.storagePath);
+    const head = await supabase.storage.from(MEDIA_BUCKET).download(data.storagePath);
     if (head.error || !head.data) throw new Error("We couldn't read the uploaded file.");
     const bytes = new Uint8Array((await head.data.slice(0, 32).arrayBuffer()) as ArrayBuffer);
     const { signatureMatchesMime } = await import("@/lib/media-signature.server");
     if (!signatureMatchesMime(bytes, data.mimeType)) {
-      await supabaseAdmin.storage.from(MEDIA_BUCKET).remove([data.storagePath]);
+      await supabase.storage.from(MEDIA_BUCKET).remove([data.storagePath]);
       throw new Error("This file's contents don't match its type, so it was rejected.");
     }
 
 
     const [limitRow, existing, postMedia] = await Promise.all([
-      supabaseAdmin
+      supabase
         .from("workspace_storage")
         .select("storage_limit_bytes")
         .eq("workspace_id", workspaceId)
         .maybeSingle(),
-      supabaseAdmin
+      supabase
         .from("media_assets")
         .select("storage_path, file_size, checksum, file_name")
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null),
-      supabaseAdmin
+      supabase
         .from("social_post_media")
         .select("storage_path, file_size")
         .eq("workspace_id", workspaceId),
@@ -302,7 +297,7 @@ export const registerMediaAsset = createServerFn({ method: "POST" })
     if (data.checksum) {
       const dupe = (existing.data ?? []).find((r) => r.checksum === data.checksum);
       if (dupe) {
-        await supabaseAdmin.storage.from(MEDIA_BUCKET).remove([data.storagePath]);
+        await supabase.storage.from(MEDIA_BUCKET).remove([data.storagePath]);
         throw new Error(`This file is already in your library as "${dupe.file_name}".`);
       }
     }
@@ -319,7 +314,7 @@ export const registerMediaAsset = createServerFn({ method: "POST" })
       media_type: kind,
     });
 
-    const { data: inserted, error } = await supabaseAdmin
+    const { data: inserted, error } = await supabase
       .from("media_assets")
       .insert({
         workspace_id: workspaceId,
