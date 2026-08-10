@@ -178,62 +178,86 @@ function CreatePost() {
 
   useEffect(() => {
     let active = true;
-    void supabase.auth.getUser().then(({ data: userData }) => {
+    void supabase.auth.getUser().then(async ({ data: userData }) => {
       if (!active) return;
       const uid = userData.user?.id ?? null;
-      if (uid) {
-        // Only load the draft when NOT reusing a previous post
-        if (!searchParams['reuse']) {
-          const draft = loadComposerDraft(uid);
-          if (draft) {
-            details.current = { ...emptyPostDetails, ...draft.details };
-            setSelected(draft.selectedAccountIds);
-            if (draft.platformContents) setCards(draft.platformContents);
-            if (draft.details.scheduledFor) setHasSchedule(true);
-            const filled = Object.values(draft.details).some((v) => typeof v === "string" && v.trim());
-            if (filled) toast.info("Restored your unsaved post.");
-          }
-        }
-      }
       setUserId(uid);
-      setRestored(true);
+
+      if (searchParams['reuse']) {
+        try {
+          const post = await fetchPostForReuse({ data: { postId: searchParams['reuse'] } });
+          if (!active || !post) return;
+
+          // 1. Pre-fill global text details
+          details.current = {
+            ...emptyPostDetails,
+            title: post.title ?? "",
+            caption: post.base_caption ?? "",
+            hashtags: (post.base_hashtags ?? []).join(" "),
+          };
+
+          // 2. Map per-platform content to `cards` and select failed accounts
+          const nextCards: CardState = {};
+          const failedAccountIds: string[] = [];
+
+          for (const d of post.social_post_destinations ?? []) {
+            if (d.publish_status !== "published" && d.social_account_id) {
+              failedAccountIds.push(d.social_account_id);
+              const pc = (d.post_platform_contents ?? [])[0];
+              if (pc) {
+                nextCards[d.social_account_id] = {
+                  ...emptyPlatformContent,
+                  title: pc.title ?? "",
+                  hook: pc.hook ?? "",
+                  caption: pc.caption ?? "",
+                  description: pc.description ?? "",
+                  hashtags: pc.hashtags?.join(" ") ?? "",
+                  keywords: pc.keywords?.join(", ") ?? "",
+                  tags: pc.tags?.join(", ") ?? "",
+                  callToAction: pc.call_to_action ?? "",
+                  altText: pc.alt_text ?? "",
+                  firstComment: pc.first_comment ?? "",
+                  pinnedComment: pc.pinned_comment ?? "",
+                  overlayText: pc.overlay_text ?? "",
+                  destinationUrl: pc.destination_url ?? "",
+                  location: pc.location ?? "",
+                  aiGenerated: pc.ai_generated ?? false,
+                  manuallyEdited: pc.manually_edited ?? false,
+                  settings: (pc.platform_settings_json as Record<string, unknown>) ?? {},
+                };
+              }
+            }
+          }
+          if (failedAccountIds.length > 0) setSelected(failedAccountIds);
+          if (Object.keys(nextCards).length > 0) setCards(nextCards);
+
+          setRestored(true);
+          toast.info("Caption & hashtags loaded — upload your video and publish.");
+        } catch (error) {
+          if (!active) return;
+          toast.error("Could not load the original post.");
+          setRestored(true);
+        }
+      } else if (uid) {
+        // Load draft for new posts
+        const draft = loadComposerDraft(uid);
+        if (draft) {
+          details.current = { ...emptyPostDetails, ...draft.details };
+          setSelected(draft.selectedAccountIds);
+          if (draft.platformContents) setCards(draft.platformContents);
+          if (draft.details.scheduledFor) setHasSchedule(true);
+          const filled = Object.values(draft.details).some((v) => typeof v === "string" && v.trim());
+          if (filled) toast.info("Restored your unsaved post.");
+        }
+        setRestored(true);
+      } else {
+        setRestored(true);
+      }
     });
+
     return () => {
       active = false;
     };
-  }, [searchParams.reuse]);
-
-  // When ?reuse=POST_ID is in the URL, fetch the old post and pre-fill text only.
-  // The user always uploads a fresh video themselves.
-  useEffect(() => {
-    if (!searchParams['reuse']) return;
-    let active = true;
-    void fetchPostForReuse({ data: { postId: searchParams['reuse'] } }).then((post) => {
-      if (!active || !post) return;
-
-      // Pre-fill text details from the original post
-      details.current = {
-        ...emptyPostDetails,
-        title: post.title ?? "",
-        caption: post.base_caption ?? "",
-        hashtags: (post.base_hashtags ?? []).join(" "),
-      };
-
-      // Select accounts that previously failed (not yet published)
-      const failedAccountIds = (post.social_post_destinations ?? [])
-        .filter((d: { publish_status: string }) => d.publish_status !== "published")
-        .map((d: { social_account_id: string | null }) => d.social_account_id)
-        .filter((id: string | null): id is string => !!id);
-      if (failedAccountIds.length > 0) setSelected(failedAccountIds);
-
-      setRestored(true);
-      toast.info("Caption & hashtags loaded — upload your video and publish.");
-    }).catch(() => {
-      if (!active) return;
-      toast.error("Could not load the original post.");
-      setRestored(true);
-    });
-    return () => { active = false; };
   }, [searchParams['reuse'], fetchPostForReuse]);
 
 
