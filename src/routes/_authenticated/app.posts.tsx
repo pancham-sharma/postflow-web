@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -397,6 +397,16 @@ const PostRow = memo(function PostRow({
             >
               <Trash2 className="size-3.5" aria-hidden />
             </button>
+          )}
+          {["failed", "partially_published"].includes(p.status) && (
+            <Link
+              to="/app/create"
+              search={{ reuse: p.id }}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              <RotateCcw className="size-3" aria-hidden />
+              Reuse for All Platforms
+            </Link>
           )}
         </div>
       </div>

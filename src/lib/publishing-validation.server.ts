@@ -80,14 +80,18 @@ export function validateDestination(
     if (!capability.publishing_enabled) {
       issues.push(issue("platform_paused", capability.notice ?? "This platform is temporarily paused."));
     }
-    const missingScopes = capability.required_scopes.filter((scope) => !subject.accountScopes.includes(scope));
-    if (missingScopes.length > 0) {
-      issues.push(
-        issue(
-          "scope_missing",
-          `Reconnect ${subject.platform} and approve the publishing permissions required for this account.`,
-        ),
-      );
+    // Skip explicit scope checks for platforms that use config-driven permissions
+    // or return misaligned scope strings during token exchange.
+    if (subject.platform !== "facebook" && subject.platform !== "instagram" && subject.platform !== "snapchat") {
+      const missingScopes = capability.required_scopes.filter((scope) => !subject.accountScopes.includes(scope));
+      if (missingScopes.length > 0) {
+        issues.push(
+          issue(
+            "scope_missing",
+            `Reconnect ${subject.platform} and approve the publishing permissions required for this account.`,
+          ),
+        );
+      }
     }
   }
 

@@ -247,3 +247,24 @@ export const deletePost = createServerFn({ method: "POST" })
     }
     return { ok: true };
   });
+
+export const getPostForReuse = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => z.object({ postId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { data: post, error } = await context.supabase
+      .from("social_posts")
+      .select(`
+        id, title, base_caption, base_hashtags, link_url,
+        social_post_media(*),
+        social_post_destinations(
+          id, platform, social_account_id, publish_status,
+          post_platform_contents(*)
+        )
+      `)
+      .eq("id", data.postId)
+      .single();
+
+    if (error) throw error;
+    return post;
+  });

@@ -55,6 +55,8 @@ const createPostInput = z.object({
   media: mediaInput.nullable().optional(),
   destinations: z.array(destinationInput).min(1).max(20),
   idempotencyKey: z.string().min(8).max(120),
+  reusedMediaId: z.string().uuid().optional(),
+  reusedPostId: z.string().uuid().optional(),
 });
 
 const POST_MEDIA_OBJECT_MAX_BYTES = 512 * 1024 * 1024;
@@ -144,15 +146,48 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
         scheduled_at_utc: scheduled,
         timezone: data.timezone ?? "UTC",
         idempotency_key: data.idempotencyKey,
+        reused_from_post_id: data.reusedPostId ?? null,
       })
       .select("id")
       .single();
     if (postError) throw postError;
 
-    if (data.media) {
+    let mediaTypeStr = "none";
+    let mediaSize = 0;
+    let mediaDuration = 0;
+    let mediaAspectRatio: number | null = null;
+    let mediaMimeType: string | null = null;
+
+    if (data.reusedMediaId) {
+      const { data: existingMedia, error: getMediaError } = await supabaseAdmin
+        .from("social_post_media")
+        .select("*")
+        .eq("id", data.reusedMediaId)
+        .single();
+      if (getMediaError) throw getMediaError;
+      
+      const { id: _, post_id: __, created_at: ___, ...mediaRow } = existingMedia;
+      const { error: mediaError } = await supabaseAdmin.from("social_post_media").insert({
+        ...mediaRow,
+        post_id: post.id,
+        workspace_id: workspaceId,
+      });
+      if (mediaError) throw mediaError;
+      mediaTypeStr = existingMedia.media_type;
+      mediaSize = existingMedia.file_size;
+      mediaDuration = existingMedia.duration_seconds ? Number(existingMedia.duration_seconds) : 0;
+      mediaAspectRatio = existingMedia.aspect_ratio ? Number(existingMedia.aspect_ratio) : null;
+      mediaMimeType = existingMedia.mime_type;
+    } else if (data.media) {
       const mediaType = classifyMedia(data.media.mimeType);
+      mediaTypeStr = mediaType;
+      mediaSize = data.media.fileSize;
+      mediaDuration = data.media.durationSeconds ?? 0;
       const aspect =
         data.media.width && data.media.height ? data.media.width / data.media.height : null;
+      mediaAspectRatio = aspect;
+      mediaMimeType = data.media.mimeType;
+      
       const { error: mediaError } = await supabaseAdmin.from("social_post_media").insert({
         post_id: post.id,
         workspace_id: workspaceId,
@@ -232,7 +267,6 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
 
     // Validate every destination against the stored capability rules.
     const capabilities = await loadCapabilities();
-    const mediaType = data.media ? classifyMedia(data.media.mimeType) : "none";
     const validations: ValidationResult[] = (destinations ?? []).map((dest) => {
       const account = accountById.get(dest.social_account_id!)!;
       const input = data.destinations.find((d) => d.socialAccountId === dest.social_account_id);
@@ -254,12 +288,12 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
           linkUrl: data.linkUrl ?? null,
           settings: (input?.settings ?? {}) as Record<string, unknown>,
           media: {
-            mediaType,
-            mimeType: data.media?.mimeType ?? null,
-            fileSize: data.media?.fileSize ?? 0,
-            durationSeconds: data.media?.durationSeconds ?? null,
-            aspectRatio:
-              data.media?.width && data.media?.height ? data.media.width / data.media.height : null,
+            mediaType: mediaTypeStr,
+            mimeType: mediaMimeType,
+            mediaSize: mediaSize,
+            mediaDuration: mediaDuration,
+            hasLink: !!data.linkUrl,
+            aspectRatio: mediaAspectRatio,
           },
         },
         capabilities[dest.platform],

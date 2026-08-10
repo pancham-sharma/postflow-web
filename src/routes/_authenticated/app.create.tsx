@@ -7,6 +7,7 @@ import { Check, FolderOpen, Info, Loader2, TriangleAlert, Upload, X } from "luci
 import { supabase } from "@/integrations/supabase/client";
 import { getDashboardData } from "@/lib/dashboard.functions";
 import { preflightMediaUpload } from "@/lib/media.functions";
+import { getPostForReuse } from "@/lib/content.functions";
 import { createAndQueuePost, dispatchPublishingJob } from "@/lib/publishing.functions";
 import {
   DEFAULT_YOUTUBE_OPTIONS,
@@ -79,6 +80,9 @@ import {
 import { ReplaceContentDialog, type ConflictTarget } from "@/components/composer/replace-content-dialog";
 
 export const Route = createFileRoute("/_authenticated/app/create")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    reuse: typeof search.reuse === "string" ? search.reuse : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Create Post — PostFlow" },
@@ -96,6 +100,7 @@ function formatSize(bytes: number) {
 }
 function CreatePost() {
   const navigate = useNavigate();
+  const searchParams = Route.useSearch();
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const fetchDashboard = useServerFn(getDashboardData);
@@ -103,6 +108,7 @@ function CreatePost() {
   const submitPost = useServerFn(createAndQueuePost);
   const dispatchPost = useServerFn(dispatchPublishingJob);
   const generateContent = useServerFn(generatePlatformContent);
+  const fetchPostForReuse = useServerFn(getPostForReuse);
 
   const { data, isLoading } = useQuery({
     queryKey: dashboardKeys.legacy(),
@@ -147,6 +153,19 @@ function CreatePost() {
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
   const [conflicts, setConflicts] = useState<ConflictTarget[] | null>(null);
 
+  // -- Reuse state: when ?reuse=POST_ID is present we pre-fill from the old post --
+  const [reusingMediaId, setReusingMediaId] = useState<string | null>(null);
+  const [reusingPostId, setReusingPostId] = useState<string | null>(null);
+  const [reusingMediaMeta, setReusingMediaMeta] = useState<{
+    storagePath: string;
+    mimeType: string;
+    fileSize: number;
+    filename: string | null;
+    width: number | null;
+    height: number | null;
+    durationSeconds: number | null;
+  } | null>(null);
+
   // Copyright-safe music: one independent audio mix per platform card.
   const fetchTracks = useServerFn(listMusicTracks);
   const { data: libraryTracks } = useQuery({
@@ -176,14 +195,17 @@ function CreatePost() {
       if (!active) return;
       const uid = userData.user?.id ?? null;
       if (uid) {
-        const draft = loadComposerDraft(uid);
-        if (draft) {
-          details.current = { ...emptyPostDetails, ...draft.details };
-          setSelected(draft.selectedAccountIds);
-          if (draft.platformContents) setCards(draft.platformContents);
-          if (draft.details.scheduledFor) setHasSchedule(true);
-          const filled = Object.values(draft.details).some((v) => typeof v === "string" && v.trim());
-          if (filled) toast.info("Restored your unsaved post.");
+        // Only load the draft when NOT reusing a previous post
+        if (!searchParams.reuse) {
+          const draft = loadComposerDraft(uid);
+          if (draft) {
+            details.current = { ...emptyPostDetails, ...draft.details };
+            setSelected(draft.selectedAccountIds);
+            if (draft.platformContents) setCards(draft.platformContents);
+            if (draft.details.scheduledFor) setHasSchedule(true);
+            const filled = Object.values(draft.details).some((v) => typeof v === "string" && v.trim());
+            if (filled) toast.info("Restored your unsaved post.");
+          }
         }
       }
       setUserId(uid);
@@ -192,7 +214,60 @@ function CreatePost() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [searchParams.reuse]);
+
+  // When ?reuse=POST_ID is in the URL, fetch the old post and pre-fill the composer.
+  useEffect(() => {
+    if (!searchParams.reuse) return;
+    let active = true;
+    void fetchPostForReuse({ data: { postId: searchParams.reuse } }).then((post) => {
+      if (!active || !post) return;
+
+      // Pre-fill text details from the original post
+      details.current = {
+        ...emptyPostDetails,
+        title: post.title ?? "",
+        caption: post.base_caption ?? "",
+        hashtags: (post.base_hashtags ?? []).join(" "),
+      };
+
+      // Select accounts that previously failed (not yet published)
+      const failedAccountIds = (post.social_post_destinations ?? [])
+        .filter((d: { publish_status: string }) => d.publish_status !== "published")
+        .map((d: { social_account_id: string | null }) => d.social_account_id)
+        .filter((id: string | null): id is string => !!id);
+      if (failedAccountIds.length > 0) setSelected(failedAccountIds);
+
+      // Pre-load media reference from the first media row
+      const firstMedia = post.social_post_media?.[0];
+      if (firstMedia) {
+        setReusingMediaId(firstMedia.id);
+        setReusingPostId(post.id);
+        setReusingMediaMeta({
+          storagePath: firstMedia.storage_path,
+          mimeType: firstMedia.mime_type,
+          fileSize: firstMedia.file_size,
+          filename: firstMedia.original_filename ?? null,
+          width: firstMedia.width ?? null,
+          height: firstMedia.height ?? null,
+          durationSeconds: firstMedia.duration_seconds ? Number(firstMedia.duration_seconds) : null,
+        });
+        setMediaMeta({
+          width: firstMedia.width ?? undefined,
+          height: firstMedia.height ?? undefined,
+          durationSeconds: firstMedia.duration_seconds ? Number(firstMedia.duration_seconds) : undefined,
+        });
+      }
+
+      setRestored(true);
+      toast.info("Post loaded — edit any field then publish.");
+    }).catch(() => {
+      if (!active) return;
+      toast.error("Could not load the original post.");
+      setRestored(true);
+    });
+    return () => { active = false; };
+  }, [searchParams.reuse, fetchPostForReuse]);
 
   const persistDraft = useCallback(
     (nextDetails: PostDetailValues, nextSelected: string[] | null, nextCards?: CardState) => {
@@ -563,14 +638,15 @@ function CreatePost() {
       return;
     }
 
+    const hasMedia = !!(file || reusingMediaId);
     // Every card is validated on its own rules — one bad card blocks only itself.
     const blockedCards = targets.filter(
-      (t) => validatePlatformContent(t.platform, cardOf(t.id), { hasMedia: !!file }).length > 0,
+      (t) => validatePlatformContent(t.platform, cardOf(t.id), { hasMedia }).length > 0,
     );
     if (blockedCards.length > 0) {
       const summaries = blockedCards.map((t) => {
         const name = platformMap[t.platform]?.name ?? t.platform;
-        const first = validatePlatformContent(t.platform, cardOf(t.id), { hasMedia: !!file })[0];
+        const first = validatePlatformContent(t.platform, cardOf(t.id), { hasMedia })[0];
         return `${name}: ${first?.message ?? "needs attention"}`;
       });
       toast.error(summaries.join(" | "));
@@ -628,7 +704,10 @@ function CreatePost() {
     let uploadedMediaPath: string | null = null;
     try {
       let mediaPath: string | null = null;
-      if (file) {
+      if (reusingMediaId) {
+        // Reuse existing media — no upload needed
+        mediaPath = null;
+      } else if (file) {
         setUploading(true);
         mediaPath = await uploadMedia();
         uploadedMediaPath = mediaPath;
@@ -663,6 +742,8 @@ function CreatePost() {
               : null,
           destinations,
           idempotencyKey: crypto.randomUUID(),
+          ...(reusingMediaId ? { reusedMediaId: reusingMediaId } : {}),
+          ...(reusingPostId ? { reusedPostId: reusingPostId } : {}),
         },
       });
 
@@ -817,6 +898,39 @@ function CreatePost() {
                   </div>
                 ))}
               </dl>
+            </div>
+          ) : reusingMediaMeta ? (
+            // Reuse mode: existing media loaded from a previous post
+            <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-primary flex items-center gap-1.5">
+                    <Check className="size-3.5" aria-hidden />
+                    Using existing video
+                  </p>
+                  <p className="text-xs text-muted-foreground break-all">
+                    {reusingMediaMeta.filename ?? reusingMediaMeta.storagePath.split("/").pop()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatSize(reusingMediaMeta.fileSize)}
+                    {reusingMediaMeta.durationSeconds
+                      ? ` · ${Math.round(reusingMediaMeta.durationSeconds)}s`
+                      : ""}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReusingMediaId(null);
+                  setReusingPostId(null);
+                  setReusingMediaMeta(null);
+                  fileInput.current?.click();
+                }}
+                className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+              >
+                Choose a different video
+              </button>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
