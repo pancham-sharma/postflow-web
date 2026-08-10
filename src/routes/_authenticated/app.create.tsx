@@ -153,19 +153,6 @@ function CreatePost() {
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
   const [conflicts, setConflicts] = useState<ConflictTarget[] | null>(null);
 
-  // -- Reuse state: when ?reuse=POST_ID is present we pre-fill from the old post --
-  const [reusingMediaId, setReusingMediaId] = useState<string | null>(null);
-  const [reusingPostId, setReusingPostId] = useState<string | null>(null);
-  const [reusingMediaMeta, setReusingMediaMeta] = useState<{
-    storagePath: string;
-    mimeType: string;
-    fileSize: number;
-    filename: string | null;
-    width: number | null;
-    height: number | null;
-    durationSeconds: number | null;
-  } | null>(null);
-
   // Copyright-safe music: one independent audio mix per platform card.
   const fetchTracks = useServerFn(listMusicTracks);
   const { data: libraryTracks } = useQuery({
@@ -216,7 +203,8 @@ function CreatePost() {
     };
   }, [searchParams.reuse]);
 
-  // When ?reuse=POST_ID is in the URL, fetch the old post and pre-fill the composer.
+  // When ?reuse=POST_ID is in the URL, fetch the old post and pre-fill text only.
+  // The user always uploads a fresh video themselves.
   useEffect(() => {
     if (!searchParams.reuse) return;
     let active = true;
@@ -238,29 +226,8 @@ function CreatePost() {
         .filter((id: string | null): id is string => !!id);
       if (failedAccountIds.length > 0) setSelected(failedAccountIds);
 
-      // Pre-load media reference from the first media row
-      const firstMedia = post.social_post_media?.[0];
-      if (firstMedia) {
-        setReusingMediaId(firstMedia.id);
-        setReusingPostId(post.id);
-        setReusingMediaMeta({
-          storagePath: firstMedia.storage_path,
-          mimeType: firstMedia.mime_type,
-          fileSize: firstMedia.file_size,
-          filename: firstMedia.original_filename ?? null,
-          width: firstMedia.width ?? null,
-          height: firstMedia.height ?? null,
-          durationSeconds: firstMedia.duration_seconds ? Number(firstMedia.duration_seconds) : null,
-        });
-        setMediaMeta({
-          width: firstMedia.width ?? undefined,
-          height: firstMedia.height ?? undefined,
-          durationSeconds: firstMedia.duration_seconds ? Number(firstMedia.duration_seconds) : undefined,
-        });
-      }
-
       setRestored(true);
-      toast.info("Post loaded — edit any field then publish.");
+      toast.info("Caption & hashtags loaded — upload your video and publish.");
     }).catch(() => {
       if (!active) return;
       toast.error("Could not load the original post.");
@@ -268,6 +235,7 @@ function CreatePost() {
     });
     return () => { active = false; };
   }, [searchParams.reuse, fetchPostForReuse]);
+
 
   const persistDraft = useCallback(
     (nextDetails: PostDetailValues, nextSelected: string[] | null, nextCards?: CardState) => {
@@ -638,7 +606,7 @@ function CreatePost() {
       return;
     }
 
-    const hasMedia = !!(file || reusingMediaId);
+    const hasMedia = !!file;
     // Every card is validated on its own rules — one bad card blocks only itself.
     const blockedCards = targets.filter(
       (t) => validatePlatformContent(t.platform, cardOf(t.id), { hasMedia }).length > 0,
@@ -704,10 +672,7 @@ function CreatePost() {
     let uploadedMediaPath: string | null = null;
     try {
       let mediaPath: string | null = null;
-      if (reusingMediaId) {
-        // Reuse existing media — no upload needed
-        mediaPath = null;
-      } else if (file) {
+      if (file) {
         setUploading(true);
         mediaPath = await uploadMedia();
         uploadedMediaPath = mediaPath;
@@ -742,7 +707,6 @@ function CreatePost() {
               : null,
           destinations,
           idempotencyKey: crypto.randomUUID(),
-          ...(reusingMediaId ? { reusedMediaId: reusingMediaId } : {}),
           ...(reusingPostId ? { reusedPostId: reusingPostId } : {}),
         },
       });

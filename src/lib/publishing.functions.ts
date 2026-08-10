@@ -55,7 +55,6 @@ const createPostInput = z.object({
   media: mediaInput.nullable().optional(),
   destinations: z.array(destinationInput).min(1).max(20),
   idempotencyKey: z.string().min(8).max(120),
-  reusedMediaId: z.string().uuid().optional(),
   reusedPostId: z.string().uuid().optional(),
 });
 
@@ -158,27 +157,7 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
     let mediaAspectRatio: number | null = null;
     let mediaMimeType: string | null = null;
 
-    if (data.reusedMediaId) {
-      const { data: existingMedia, error: getMediaError } = await supabaseAdmin
-        .from("social_post_media")
-        .select("*")
-        .eq("id", data.reusedMediaId)
-        .single();
-      if (getMediaError) throw getMediaError;
-      
-      const { id: _, post_id: __, created_at: ___, ...mediaRow } = existingMedia;
-      const { error: mediaError } = await supabaseAdmin.from("social_post_media").insert({
-        ...mediaRow,
-        post_id: post.id,
-        workspace_id: workspaceId,
-      });
-      if (mediaError) throw mediaError;
-      mediaTypeStr = existingMedia.media_type;
-      mediaSize = existingMedia.file_size;
-      mediaDuration = existingMedia.duration_seconds ? Number(existingMedia.duration_seconds) : 0;
-      mediaAspectRatio = existingMedia.aspect_ratio ? Number(existingMedia.aspect_ratio) : null;
-      mediaMimeType = existingMedia.mime_type;
-    } else if (data.media) {
+    if (data.media) {
       const mediaType = classifyMedia(data.media.mimeType);
       mediaTypeStr = mediaType;
       mediaSize = data.media.fileSize;
