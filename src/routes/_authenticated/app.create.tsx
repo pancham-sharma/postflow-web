@@ -68,6 +68,7 @@ import {
 import { generatePlatformContent } from "@/lib/ai-content.functions";
 import { generateSourceIdeaForPlatform } from "@/lib/source-idea.functions";
 import { MEDIA_BUCKET, createUserPostStoragePath, formatBytes, validateFile } from "@/lib/media-library";
+import { uploadViaResumableTus } from "@/lib/tus-upload";
 import {
   applyGeneratedContent,
   cardHasContent,
@@ -519,9 +520,9 @@ function CreatePost() {
       file_size: file.size,
       mime: file.type || "application/octet-stream",
     });
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
     const uid = userData.user?.id;
-    if (!uid) throw new Error("Your session expired — sign in again.");
+    if (userError || !uid) throw new Error("Your session expired — sign in again.");
     await preflightUpload({
       data: {
         fileName: file.name,
@@ -531,19 +532,23 @@ function CreatePost() {
       },
     });
     const path = createUserPostStoragePath(uid, file.name);
-    const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
-      cacheControl: "3600",
-      upsert: false,
+    // Use TUS resumable upload so large videos (>50 MB) bypass the global
+    // Supabase HTTP body limit and use the bucket-level 512 MiB limit.
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error("Your session expired — sign in again.");
+    const supabaseUrl =
+      (import.meta.env["VITE_SUPABASE_URL"] as string | undefined) ||
+      (import.meta.env["VITE_SUPABASE_PROJECT_URL"] as string | undefined) ||
+      "";
+    await uploadViaResumableTus({
+      supabaseUrl,
+      accessToken,
+      bucket: MEDIA_BUCKET,
+      path,
+      file,
       contentType: file.type || "application/octet-stream",
     });
-    if (error) {
-      if (/maximum allowed size/i.test(error.message)) {
-        throw new Error(
-          "Media storage is not configured for a file of this size yet. Please try again after the storage update has been deployed.",
-        );
-      }
-      throw error;
-    }
     return path;
   }
 

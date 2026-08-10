@@ -42,6 +42,7 @@ import {
 } from "@/lib/media-library";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/utils";
+import { uploadViaResumableTus } from "@/lib/tus-upload";
 
 export const Route = createFileRoute("/_authenticated/app/media")({
   // ?upload=1 comes from the dashboard "Upload media" quick action.
@@ -181,17 +182,30 @@ function MediaLibraryPage() {
       patch({ progress: 35 });
       const path = createUserPostStoragePath(uid, file.name);
       uploadedPath = path;
-      const upload = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
+      // TUS resumable upload: bypasses the 50 MB global HTTP limit and uses
+      // the bucket-level 512 MiB limit instead.
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Your session expired — sign in again.");
+      const supabaseUrl =
+        (import.meta.env["VITE_SUPABASE_URL"] as string | undefined) ||
+        (import.meta.env["VITE_SUPABASE_PROJECT_URL"] as string | undefined) ||
+        "";
+      await uploadViaResumableTus({
+        supabaseUrl,
+        accessToken,
+        bucket: MEDIA_BUCKET,
+        path,
+        file,
         contentType: file.type,
+        onProgress: (pct) => patch({ progress: 35 + Math.round(pct * 0.45) }),
+        signal: controller.signal,
       });
       if (controller.signal.aborted) {
         await supabase.storage.from(MEDIA_BUCKET).remove([path]);
         patch({ status: "cancelled", message: "Cancelled" });
         return;
       }
-      if (upload.error) throw upload.error;
       patch({ progress: 80 });
 
       await register({
