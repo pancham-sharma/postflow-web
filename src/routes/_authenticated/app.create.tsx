@@ -81,7 +81,7 @@ import { ReplaceContentDialog, type ConflictTarget } from "@/components/composer
 
 export const Route = createFileRoute("/_authenticated/app/create")({
   validateSearch: (search: Record<string, unknown>) => ({
-    reuse: typeof search.reuse === "string" ? search.reuse : undefined,
+    reuse: typeof search['reuse'] === "string" ? search['reuse'] : undefined,
   }),
   head: () => ({
     meta: [
@@ -183,7 +183,7 @@ function CreatePost() {
       const uid = userData.user?.id ?? null;
       if (uid) {
         // Only load the draft when NOT reusing a previous post
-        if (!searchParams.reuse) {
+        if (!searchParams['reuse']) {
           const draft = loadComposerDraft(uid);
           if (draft) {
             details.current = { ...emptyPostDetails, ...draft.details };
@@ -206,9 +206,9 @@ function CreatePost() {
   // When ?reuse=POST_ID is in the URL, fetch the old post and pre-fill text only.
   // The user always uploads a fresh video themselves.
   useEffect(() => {
-    if (!searchParams.reuse) return;
+    if (!searchParams['reuse']) return;
     let active = true;
-    void fetchPostForReuse({ data: { postId: searchParams.reuse } }).then((post) => {
+    void fetchPostForReuse({ data: { postId: searchParams['reuse'] } }).then((post) => {
       if (!active || !post) return;
 
       // Pre-fill text details from the original post
@@ -234,7 +234,7 @@ function CreatePost() {
       setRestored(true);
     });
     return () => { active = false; };
-  }, [searchParams.reuse, fetchPostForReuse]);
+  }, [searchParams['reuse'], fetchPostForReuse]);
 
 
   const persistDraft = useCallback(
@@ -707,7 +707,6 @@ function CreatePost() {
               : null,
           destinations,
           idempotencyKey: crypto.randomUUID(),
-          ...(reusingPostId ? { reusedPostId: reusingPostId } : {}),
         },
       });
 
@@ -862,39 +861,6 @@ function CreatePost() {
                   </div>
                 ))}
               </dl>
-            </div>
-          ) : reusingMediaMeta ? (
-            // Reuse mode: existing media loaded from a previous post
-            <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-primary flex items-center gap-1.5">
-                    <Check className="size-3.5" aria-hidden />
-                    Using existing video
-                  </p>
-                  <p className="text-xs text-muted-foreground break-all">
-                    {reusingMediaMeta.filename ?? reusingMediaMeta.storagePath.split("/").pop()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatSize(reusingMediaMeta.fileSize)}
-                    {reusingMediaMeta.durationSeconds
-                      ? ` · ${Math.round(reusingMediaMeta.durationSeconds)}s`
-                      : ""}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setReusingMediaId(null);
-                  setReusingPostId(null);
-                  setReusingMediaMeta(null);
-                  fileInput.current?.click();
-                }}
-                className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
-              >
-                Choose a different video
-              </button>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">

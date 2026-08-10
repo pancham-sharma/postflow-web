@@ -145,7 +145,7 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
         scheduled_at_utc: scheduled,
         timezone: data.timezone ?? "UTC",
         idempotency_key: data.idempotencyKey,
-        reused_from_post_id: data.reusedPostId ?? null,
+        reused_from_post_id: (data.reusedPostId ?? null) as never,
       })
       .select("id")
       .single();
@@ -267,7 +267,7 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
           linkUrl: data.linkUrl ?? null,
           settings: (input?.settings ?? {}) as Record<string, unknown>,
           media: {
-            mediaType: mediaTypeStr,
+            mediaType: mediaTypeStr as "image" | "video" | "none",
             mimeType: mediaMimeType,
             mediaSize: mediaSize,
             mediaDuration: mediaDuration,
