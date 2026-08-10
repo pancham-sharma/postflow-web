@@ -476,7 +476,8 @@ Stored as backend secrets and read inside server handlers only.
 | `YOUTUBE_REDIRECT_URI`                  | Exact YouTube OAuth callback URL                                                               |
 | `META_OAUTH_CLIENT_ID`                  | Facebook Pages OAuth                                                                           |
 | `META_OAUTH_CLIENT_SECRET`              | Facebook Pages OAuth                                                                           |
-| `META_PAGES_MANAGE_POSTS_AVAILABLE`     | flag: request `pages_manage_posts` scope or not                                                |
+| `FACEBOOK_CONFIGURATION_ID`             | Facebook Login for Business configuration used by the Pages OAuth flow                        |
+| `META_PAGES_MANAGE_POSTS_AVAILABLE`     | legacy scope flag; Business Login permissions come from the Meta configuration                |
 | `INSTAGRAM_OAUTH_CLIENT_ID`             | Instagram Login                                                                                |
 | `INSTAGRAM_OAUTH_CLIENT_SECRET`         | Instagram Login                                                                                |
 | `INSTAGRAM_REDIRECT_URI`                | Exact HTTPS Instagram OAuth callback URL                                                       |

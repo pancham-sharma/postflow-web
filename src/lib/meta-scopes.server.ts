@@ -39,5 +39,11 @@ export function facebookOAuthScopeString(): string {
 
 /** Temporary debug payload (no secrets, tokens or codes). */
 export function facebookOAuthDebugPayload() {
-  return { provider: "facebook" as const, scopes: facebookOAuthScopes() };
+  return {
+    provider: "facebook" as const,
+    flow: "facebook_login_for_business" as const,
+    scopes: [],
+    configurationIdEnv: "FACEBOOK_CONFIGURATION_ID",
+    permissionsConfiguredInMeta: [...BASE_FACEBOOK_SCOPES, PAGES_MANAGE_POSTS],
+  };
 }

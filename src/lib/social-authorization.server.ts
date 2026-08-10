@@ -55,8 +55,8 @@ export async function buildSocialAuthorization(args: {
     [config.clientIdParam ?? "client_id"]: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: config.scopes.join(config.scopeSeparator ?? " "),
     state,
+    ...(config.omitScopes ? {} : { scope: config.scopes.join(config.scopeSeparator ?? " ") }),
     ...(config.extraAuthorizeParams ?? {}),
   });
   if (codeVerifier) {

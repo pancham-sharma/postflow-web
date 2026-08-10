@@ -128,3 +128,11 @@ test("rejects missing callback values and handles provider authorization errors"
     },
   );
 });
+
+test("builds Facebook Login for Business authorization parameters", async () => {
+  const { facebookBusinessAuthorizeParams } = await import("./facebook-oauth-config.ts");
+  assert.deepEqual(facebookBusinessAuthorizeParams("1081657210879915"), {
+    config_id: "1081657210879915",
+    override_default_response_type: "true",
+  });
+});

@@ -1,7 +1,10 @@
 // Server-only OAuth provider definitions for the six publishing platforms.
 import { createHash } from "node:crypto";
 import type { SocialPlatform } from "./social-platforms";
-import { facebookOAuthScopes } from "./meta-scopes.server";
+import {
+  FACEBOOK_CONFIGURATION_ID_ENV,
+  facebookBusinessAuthorizeParams,
+} from "./facebook-oauth-config";
 import {
   OAuthProviderError,
   oauthFailureDetails,
@@ -47,6 +50,9 @@ export type ProviderConfig = {
   clientSecretEnv: string;
   /** Some providers use a non-standard client ID parameter name. */
   clientIdParam?: string;
+  /** Facebook Login for Business supplies permissions through config_id. */
+  configurationIdEnv?: string;
+  omitScopes?: boolean;
   usePkce?: boolean;
   /** Basic-auth the token endpoint instead of posting the secret in the body. */
   tokenAuthBasic?: boolean;
@@ -154,10 +160,14 @@ export const providers: Record<SocialPlatform, ProviderConfig> = {
     // platform is not configured with "Invalid platform app".
     authorizeUrl: "https://www.facebook.com/dialog/oauth",
     tokenUrl: "https://graph.facebook.com/v21.0/oauth/access_token",
-    scopes: ["pages_show_list", "pages_read_engagement", "business_management"],
+    // Facebook Login for Business supplies the selected permissions/assets via
+    // config_id rather than the classic scope-based Login dialog.
+    scopes: [],
     scopeSeparator: ",",
     clientIdEnv: "META_OAUTH_CLIENT_ID",
     clientSecretEnv: "META_OAUTH_CLIENT_SECRET",
+    configurationIdEnv: FACEBOOK_CONFIGURATION_ID_ENV,
+    omitScopes: true,
     supportsRefresh: false,
     identity: async (token) => {
       const me = await providerJson(
@@ -343,10 +353,23 @@ export function providerCredentials(platform: SocialPlatform) {
   }
 
   if (platform === "facebook") {
-    // pages_manage_posts is only requested when Meta has enabled it for the app.
-    const scopes = facebookOAuthScopes();
-    console.info("[META_OAUTH_SCOPES]", scopes.join(","));
-    return { config: { ...config, scopes, scopeSeparator: "," }, clientId, clientSecret };
+    const configurationId = readEnv(config.configurationIdEnv ?? "");
+    if (!configurationId || !/^\d+$/.test(configurationId)) {
+      throw invalid("missing or invalid Facebook Login for Business configuration ID");
+    }
+    return {
+      config: {
+        ...config,
+        scopes: [],
+        omitScopes: true,
+        extraAuthorizeParams: {
+          ...(config.extraAuthorizeParams ?? {}),
+          ...facebookBusinessAuthorizeParams(configurationId),
+        },
+      },
+      clientId,
+      clientSecret,
+    };
   }
 
   return { config, clientId, clientSecret };

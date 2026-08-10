@@ -85,7 +85,18 @@ export const Route = createFileRoute("/api/public/oauth/connect/$platform")({
           return failTo(pending.reason, "This connect link expired. Please try again.");
         }
 
-        let creds: { config: { authorizeUrl: string; scopes: string[]; scopeSeparator?: string; clientIdParam?: string; extraAuthorizeParams?: Record<string, string>; usePkce?: boolean }; clientId: string };
+        let creds: {
+          config: {
+            authorizeUrl: string;
+            scopes: string[];
+            scopeSeparator?: string;
+            clientIdParam?: string;
+            omitScopes?: boolean;
+            extraAuthorizeParams?: Record<string, string>;
+            usePkce?: boolean;
+          };
+          clientId: string;
+        };
         try {
           creds = providerCredentials(platform) as typeof creds;
         } catch (error) {
@@ -112,8 +123,10 @@ export const Route = createFileRoute("/api/public/oauth/connect/$platform")({
           response_type: "code",
           [config.clientIdParam ?? "client_id"]: clientId,
           redirect_uri: redirectUri,
-          scope: config.scopes.join(config.scopeSeparator ?? " "),
           state,
+          ...(config.omitScopes
+            ? {}
+            : { scope: config.scopes.join(config.scopeSeparator ?? " ") }),
           ...(config.extraAuthorizeParams ?? {}),
         });
         if (config.usePkce && pending.codeVerifier) {
