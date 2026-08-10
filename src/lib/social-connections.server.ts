@@ -4,6 +4,7 @@ import { connectionStatus, type SocialConnection, type SocialPlatform } from "./
 import { createHash } from "node:crypto";
 import { decryptToken, encryptToken } from "./token-crypto.server";
 import { providers } from "./social-oauth.server";
+import { tokenExpiryIso } from "./token-expiry.server";
 
 async function db() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -103,9 +104,7 @@ export async function saveConnection(
         scopes: tokens.scopes,
         access_token_ciphertext: encryptToken(tokens.accessToken),
         refresh_token_ciphertext: tokens.refreshToken ? encryptToken(tokens.refreshToken) : null,
-        token_expires_at: tokens.expiresInSeconds
-          ? new Date(Date.now() + tokens.expiresInSeconds * 1000).toISOString()
-          : null,
+        token_expires_at: tokenExpiryIso(tokens.expiresInSeconds),
         last_refresh_at: now,
         last_refresh_error: null,
         refresh_failure_count: 0,
@@ -186,9 +185,7 @@ export async function updateConnectionTokens(
       ...(tokens.refreshToken
         ? { refresh_token_ciphertext: encryptToken(tokens.refreshToken) }
         : {}),
-      token_expires_at: tokens.expiresInSeconds
-        ? new Date(Date.now() + tokens.expiresInSeconds * 1000).toISOString()
-        : null,
+      token_expires_at: tokenExpiryIso(tokens.expiresInSeconds),
       scopes: tokens.scopes,
       last_sync_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

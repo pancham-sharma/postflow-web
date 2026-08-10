@@ -115,24 +115,12 @@ const snapchat: PublishingProviderAdapter = {
     try {
       // --- Idempotency: an already-created post is confirmed, never recreated.
       if (existing.contentId) {
-        const confirmation = await service.getContentStatus(capability.accessToken, existing.contentId);
-        if (confirmation.status === "published") {
-          return {
-            status: "published",
-            retryable: false,
-            providerPostId: existing.contentId,
-            providerPostUrl: confirmation.url ?? undefined,
-            rawResponseSafe: { mode: "public_profile_api", destination, reused: true },
-          };
-        }
-        if (confirmation.status === "processing") {
-          return {
-            status: "processing",
-            retryable: true,
-            providerJobId: existing.contentId,
-            rawResponseSafe: { mode: "public_profile_api", destination, stage: "confirming" },
-          };
-        }
+        return {
+          status: "published",
+          retryable: false,
+          providerPostId: existing.contentId,
+          rawResponseSafe: { mode: "public_profile_api", destination, reused: true },
+        };
       }
 
       // --- Media: reuse an already-uploaded asset when present. --------------

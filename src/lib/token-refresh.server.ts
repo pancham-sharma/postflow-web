@@ -3,6 +3,7 @@
 import type { SocialPlatform } from "@/lib/social-platforms";
 import { encryptToken, decryptToken } from "@/lib/token-crypto.server";
 import { classifyProviderError, safeReason } from "@/lib/provider-error-map";
+import { tokenExpiryIso } from "@/lib/token-expiry.server";
 
 export type RefreshOutcome =
   | { ok: true; accessToken: string; refreshed: boolean }
@@ -81,10 +82,8 @@ async function releaseLock(connectionId: string, status: string) {
   await supabase.from("social_connections").update({ connection_status: status }).eq("id", connectionId);
 }
 
-function tokenExpiresAt(expiresInSeconds: number | null): string | null {
-  // Never invent an expiry the provider did not return.
-  if (!expiresInSeconds || expiresInSeconds <= 0) return null;
-  return new Date(Date.now() + expiresInSeconds * 1000).toISOString();
+function tokenExpiresAt(expiresInSeconds: number | null): string {
+  return tokenExpiryIso(expiresInSeconds);
 }
 
 /** Refresh failures that can never succeed again without a fresh authorization. */

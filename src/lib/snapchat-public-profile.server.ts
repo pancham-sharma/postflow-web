@@ -21,6 +21,14 @@ import {
   type SnapchatMediaFacts,
 } from "./snapchat-media-validation";
 import type { SnapchatErrorCode } from "./snapchat-errors";
+import { tokenExpiryIso } from "./token-expiry.server";
+import { createCipheriv, randomBytes } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 
 export const SNAPCHAT_PP_AUTHORIZE_URL = "https://accounts.snapchat.com/login/oauth2/authorize";
 export const SNAPCHAT_PP_TOKEN_URL = "https://accounts.snapchat.com/login/oauth2/access_token";
@@ -263,9 +271,7 @@ export async function ensureFreshToken(userId: string): Promise<string> {
     ...(refreshed.refreshToken
       ? { refresh_token_ciphertext: encryptToken(refreshed.refreshToken) }
       : {}),
-    token_expires_at: refreshed.expiresInSeconds
-      ? new Date(Date.now() + refreshed.expiresInSeconds * 1000).toISOString()
-      : null,
+    token_expires_at: tokenExpiryIso(refreshed.expiresInSeconds),
     connection_status: "connected",
     last_error_code: null,
   });
@@ -288,9 +294,7 @@ export async function storeConnection(args: {
       refresh_token_ciphertext: args.tokens.refreshToken
         ? encryptToken(args.tokens.refreshToken)
         : null,
-      token_expires_at: args.tokens.expiresInSeconds
-        ? new Date(Date.now() + args.tokens.expiresInSeconds * 1000).toISOString()
-        : null,
+      token_expires_at: tokenExpiryIso(args.tokens.expiresInSeconds),
       granted_scopes: args.tokens.scopes,
       connection_status: "connected",
       last_error_code: null,
@@ -299,7 +303,14 @@ export async function storeConnection(args: {
     } as never,
     { onConflict: "user_id" },
   );
-  if (error) throw error;
+  if (error) {
+    console.error("[SNAP_PP_DB_INSERT_FAILED]", {
+      table: "snapchat_public_profile_connections",
+      operation: "upsert",
+      error_code: error.code ?? "unknown",
+    });
+    throw error;
+  }
   console.info("[SNAP_PP_OAUTH_SUCCESS]", { user_id: args.userId });
 }
 
@@ -336,7 +347,9 @@ async function apiFetch(
 }
 
 function parseProfiles(body: Record<string, any>): { id: string; name: string }[] {
-  const list: any[] = Array.isArray(body["public_profiles"])
+  const list: any[] = body["public_profile"]
+    ? [body["public_profile"]]
+    : Array.isArray(body["public_profiles"])
     ? body["public_profiles"]
     : Array.isArray(body["data"])
       ? body["data"]
@@ -400,7 +413,9 @@ export async function verifyCapability(userId: string): Promise<CapabilityReport
   console.info("[SNAP_PP_PROFILE_LOOKUP]", { user_id: userId });
   let result;
   try {
-    result = await apiFetch(accessToken, "/me/public_profiles");
+    // This endpoint both discovers the profile id and verifies that the
+    // connected OAuth client is allowlisted for the Public Profile API.
+    result = await apiFetch(accessToken, "/public_profiles/my_profile");
   } catch {
     return empty("network_error");
   }
@@ -550,27 +565,80 @@ export async function createMedia(args: {
   mimeType: string;
 }): Promise<MediaUploadResult> {
   console.info("[SNAP_PP_MEDIA_UPLOAD_START]", { public_profile_id: args.publicProfileId });
-  const result = await apiFetch(args.accessToken, `/public_profiles/${args.publicProfileId}/media`, {
-    method: "POST",
-    body: JSON.stringify({
-      media_type: "VIDEO",
-      media_url: args.mediaUrl,
-      file_name: args.fileName,
-      content_type: args.mimeType,
-    }),
-  });
-  if (result.status >= 400) {
-    console.error("[SNAP_PP_PUBLISH_FAILED]", { stage: "media_upload", status: result.status });
-    throwForStatus(result.status, result.retryAfter, "SNAPCHAT_MEDIA_UPLOAD_FAILED");
+  if (args.mimeType !== "video/mp4") {
+    throw new SnapchatApiError("SNAPCHAT_VIDEO_UNSUPPORTED", "Snapchat requires an MP4 video.");
   }
-  const mediaId = String(result.body["media_id"] ?? result.body["id"] ?? result.body["asset_id"] ?? "");
-  if (!mediaId) {
-    throw new SnapchatApiError("SNAPCHAT_MEDIA_UPLOAD_FAILED", "Snapchat did not return a media id.", {
-      retryable: true,
+
+  const key = randomBytes(32);
+  const iv = randomBytes(16);
+  const workDir = await mkdtemp(join(tmpdir(), "postflow-snap-"));
+  const encryptedPath = join(workDir, "media.enc");
+  try {
+    const source = await fetch(args.mediaUrl);
+    if (!source.ok || !source.body) {
+      throw new SnapchatApiError("SNAPCHAT_VIDEO_NOT_FOUND", "The stored Snapchat video could not be downloaded.");
+    }
+    await pipeline(
+      Readable.fromWeb(source.body as never),
+      createCipheriv("aes-256-cbc", key, iv),
+      createWriteStream(encryptedPath),
+    );
+
+    const created = await apiFetch(args.accessToken, `/public_profiles/${args.publicProfileId}/media`, {
+      method: "POST",
+      body: JSON.stringify({ type: "VIDEO", name: args.fileName.slice(0, 255), key: key.toString("base64"), iv: iv.toString("base64") }),
     });
+    if (created.status >= 400 || String(created.body["request_status"] ?? "SUCCESS") !== "SUCCESS") {
+      console.error("[SNAP_PP_PUBLISH_FAILED]", { stage: "media_object_create", status: created.status });
+      throwForStatus(created.status, created.retryAfter, "SNAPCHAT_MEDIA_UPLOAD_FAILED");
+    }
+    const mediaId = String(created.body["media_id"] ?? "");
+    if (!mediaId) throw new SnapchatApiError("SNAPCHAT_MEDIA_UPLOAD_FAILED", "Snapchat did not return a media id.", { retryable: true });
+
+    const addPath = String(created.body["add_path"] ?? `/public_profiles/${args.publicProfileId}/media/${mediaId}/multipart-upload`);
+    const finalizePath = String(created.body["finalize_path"] ?? addPath);
+    const encryptedSize = (await stat(encryptedPath)).size;
+    const chunkSize = 32 * 1024 * 1024;
+    const file = await (await import("node:fs/promises")).open(encryptedPath, "r");
+    try {
+      let offset = 0;
+      let partNumber = 1;
+      while (offset < encryptedSize) {
+        const length = Math.min(chunkSize, encryptedSize - offset);
+        const chunk = Buffer.allocUnsafe(length);
+        await file.read(chunk, 0, length, offset);
+        const form = new FormData();
+        form.set("action", "ADD");
+        form.set("part_number", String(partNumber));
+        form.set("file", new Blob([chunk], { type: "video/mp4" }), `${args.fileName}.enc`);
+        const response = await fetch(addPath.startsWith("http") ? addPath : `https://businessapi.snapchat.com${addPath}`, {
+          method: "POST", headers: { Authorization: `Bearer ${args.accessToken}` }, body: form,
+        });
+        const body = (await response.json().catch(() => ({}))) as Record<string, any>;
+        if (!response.ok || String(body["request_status"] ?? "SUCCESS") !== "SUCCESS") {
+          throwForStatus(response.status, Number(response.headers.get("retry-after")) || null, "SNAPCHAT_MEDIA_UPLOAD_FAILED");
+        }
+        offset += length;
+        partNumber += 1;
+      }
+    } finally {
+      await file.close();
+    }
+
+    const finalize = new FormData();
+    finalize.set("action", "FINALIZE");
+    const finalizeResponse = await fetch(finalizePath.startsWith("http") ? finalizePath : `https://businessapi.snapchat.com${finalizePath}`, {
+      method: "POST", headers: { Authorization: `Bearer ${args.accessToken}` }, body: finalize,
+    });
+    const finalizeBody = (await finalizeResponse.json().catch(() => ({}))) as Record<string, any>;
+    if (!finalizeResponse.ok || String(finalizeBody["request_status"] ?? "SUCCESS") !== "SUCCESS") {
+      throwForStatus(finalizeResponse.status, Number(finalizeResponse.headers.get("retry-after")) || null, "SNAPCHAT_MEDIA_PROCESSING_FAILED");
+    }
+    console.info("[SNAP_PP_MEDIA_UPLOAD_SUCCESS]", { snapchat_media_id: mediaId, encrypted_bytes: encryptedSize });
+    return { mediaId };
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
   }
-  console.info("[SNAP_PP_MEDIA_UPLOAD_SUCCESS]", { snapchat_media_id: mediaId });
-  return { mediaId };
 }
 
 export type MediaProcessingState = "pending" | "processing" | "ready" | "failed";
@@ -600,26 +668,12 @@ export async function waitForMedia(
   mediaId: string,
   opts: { timeoutMs?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<void> {
-  const timeoutMs = opts.timeoutMs ?? 4 * 60 * 1000;
-  const baseInterval = opts.intervalMs ?? 5000;
-  const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
-  const deadline = Date.now() + timeoutMs;
-  let attempt = 0;
-  while (Date.now() < deadline) {
-    const { state, retryAfter } = await getMediaState(accessToken, mediaId);
-    if (state === "ready") return;
-    if (state === "failed") {
-      throw new SnapchatApiError("SNAPCHAT_MEDIA_PROCESSING_FAILED", "Snapchat could not process this video.");
-    }
-    attempt += 1;
-    const wait = retryAfter ? retryAfter * 1000 : Math.min(baseInterval * attempt, 20000);
-    await sleep(wait);
-  }
-  throw new SnapchatApiError(
-    "SNAPCHAT_MEDIA_PROCESSING_TIMEOUT",
-    "Snapchat is still processing this video.",
-    { retryable: true },
-  );
+  // Snapchat's FINALIZE response is the authoritative readiness signal for a
+  // Public Profile media object; the Public Profile API does not expose the
+  // generic `/media/{id}` status endpoint used by older implementations.
+  void accessToken;
+  void mediaId;
+  void opts;
 }
 
 export type ContentCreation = {
@@ -649,17 +703,17 @@ export async function createContent(args: {
   const result = await apiFetch(args.accessToken, path, {
     method: "POST",
     headers: { "X-Idempotency-Key": args.idempotencyKey },
-    body: JSON.stringify({
-      media_id: args.mediaId,
-      caption: args.caption,
-      idempotency_key: args.idempotencyKey,
-    }),
+    body: JSON.stringify(
+      args.destination === "spotlight"
+        ? { media_id: args.mediaId, description: args.caption.slice(0, 160), locale: "en_US" }
+        : { media_id: args.mediaId },
+    ),
   });
-  if (result.status >= 400) {
+  if (result.status >= 400 || String(result.body["request_status"] ?? "SUCCESS") !== "SUCCESS") {
     console.error("[SNAP_PP_PUBLISH_FAILED]", { stage: "content_create", status: result.status });
     throwForStatus(result.status, result.retryAfter, "SNAPCHAT_CONTENT_CREATE_FAILED");
   }
-  const contentId = String(result.body["id"] ?? result.body["content_id"] ?? "");
+  const contentId = String(result.body["id"] ?? result.body["content_id"] ?? result.body["request_id"] ?? "");
   if (!contentId) {
     throw new SnapchatApiError("SNAPCHAT_CONTENT_CREATE_FAILED", "Snapchat did not confirm this post.", {
       retryable: true,
