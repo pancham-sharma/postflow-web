@@ -82,7 +82,7 @@ async function releaseLock(connectionId: string, status: string) {
   await supabase.from("social_connections").update({ connection_status: status }).eq("id", connectionId);
 }
 
-function tokenExpiresAt(expiresInSeconds: number | null): string {
+function tokenExpiresAt(expiresInSeconds: number | null): string | null {
   return tokenExpiryIso(expiresInSeconds);
 }
 

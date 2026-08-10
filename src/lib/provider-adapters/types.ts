@@ -19,6 +19,8 @@ export type ProviderMedia = {
   mimeType: string | null;
   /** Time-limited URL the provider fetches the asset from. */
   signedUrl: string | null;
+  /** Optional pre-generated poster image for providers such as Pinterest. */
+  thumbnailUrl?: string | null;
   fileSize: number;
   durationSeconds: number | null;
   width: number | null;

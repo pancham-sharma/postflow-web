@@ -64,7 +64,9 @@ export async function listConnectionsForUser(userId: string): Promise<SocialConn
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
   return (data ?? []).map(toConnection);
 }
 
@@ -116,7 +118,17 @@ export async function saveConnection(
     )
     .select("id")
     .single();
-  if (error) throw error;
+  if (error) {
+    console.error("[SOCIAL_CONNECTION_DB_WRITE_FAILED]", {
+      table: "social_connections",
+      operation: "upsert",
+      user_id: userId,
+      provider: platform,
+      error_code: error.code ?? "unknown",
+      error_message: error.message,
+    });
+    throw error;
+  }
 
   await supabase.from("social_account_events").insert({
     workspace_id: workspaceId,

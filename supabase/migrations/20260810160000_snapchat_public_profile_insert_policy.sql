@@ -21,13 +21,3 @@ WITH CHECK (
     )
   )
 );
-
--- Existing connections that predate the one-day session rule must not remain
--- valid forever just because their provider omitted an expiry value.
-UPDATE public.social_connections
-SET token_expires_at = now() + interval '1 day'
-WHERE token_expires_at IS NULL OR token_expires_at > now() + interval '1 day';
-
-UPDATE public.snapchat_public_profile_connections
-SET token_expires_at = now() + interval '1 day'
-WHERE token_expires_at IS NULL OR token_expires_at > now() + interval '1 day';

@@ -201,7 +201,7 @@ async function buildPublishInput(loaded: LoadedDestination) {
         .maybeSingle(),
       supabase
         .from("social_post_media")
-        .select("storage_path, media_type, mime_type, file_size, width, height, duration_seconds, aspect_ratio, alt_text")
+        .select("storage_path, thumbnail_path, media_type, mime_type, file_size, width, height, duration_seconds, aspect_ratio, alt_text")
         .eq("post_id", loaded.postId)
         .order("sort_order", { ascending: true })
         .limit(1)
@@ -227,6 +227,7 @@ async function buildPublishInput(loaded: LoadedDestination) {
   // Retries rebuild the payload from the stored upload and mint a brand new
   // signed URL, so an expired link never causes a failure on its own.
   const freshSignedUrl = media?.storage_path ? await signedMediaUrl(media.storage_path) : null;
+  const thumbnailUrl = media?.thumbnail_path ? await signedMediaUrl(media.thumbnail_path) : null;
   if (media?.storage_path && !freshSignedUrl) {
     throw new ProviderError(
       "The uploaded video could no longer be read from storage. Re-upload the video on this post.",
@@ -237,6 +238,7 @@ async function buildPublishInput(loaded: LoadedDestination) {
     mediaType,
     mimeType: media?.mime_type ?? null,
     signedUrl: freshSignedUrl,
+    thumbnailUrl,
     fileSize: Number(media?.file_size ?? 0),
     durationSeconds: media?.duration_seconds ? Number(media.duration_seconds) : null,
     width: media?.width ?? null,
