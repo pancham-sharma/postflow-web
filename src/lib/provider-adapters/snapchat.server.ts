@@ -64,9 +64,9 @@ async function saveJobIds(
 function manualShare(reason: string): ProviderPublishResult {
   console.info("[SNAP_PP_CAPABILITY_UNAVAILABLE]", { reason });
   return {
-    status: "failed",
+    status: "requires_user_action",
     retryable: false,
-    errorMessage: "Automatic Snapchat publishing is unavailable for this connection. Please verify your capability.",
+    userAction: { code: SNAPCHAT_MANUAL_SHARE_CODE, message: SNAPCHAT_READY_TO_SHARE_MESSAGE },
     rawResponseSafe: { mode: "creative_kit", reason },
   };
 }
