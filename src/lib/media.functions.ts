@@ -302,6 +302,18 @@ export const registerMediaAsset = createServerFn({ method: "POST" })
       }
     }
 
+    // ── Diagnostic: log safe context before INSERT so RLS failures are traceable ──
+    console.log("[MEDIA_ASSET_INSERT_PREFLIGHT]", {
+      operation: "media_assets_insert",
+      user_id_present: Boolean(userId),
+      workspace_id_present: Boolean(workspaceId),
+      workspace_id: workspaceId,
+      file_name: data.fileName,
+      bucket: MEDIA_BUCKET,
+      storage_path_prefix: data.storagePath.split("/").slice(0, 3).join("/"),
+      media_type: kind,
+    });
+
     const { data: inserted, error } = await supabase
       .from("media_assets")
       .insert({
@@ -323,7 +335,20 @@ export const registerMediaAsset = createServerFn({ method: "POST" })
       })
       .select("id")
       .single();
-    if (error) throw error;
+
+    if (error) {
+      console.error("[MEDIA_RLS_ERROR]", {
+        table: "media_assets",
+        operation: "INSERT",
+        code: error.code,
+        message: error.message,
+        details: (error as any).details ?? null,
+        hint: (error as any).hint ?? null,
+        user_id_present: Boolean(userId),
+        workspace_id: workspaceId,
+      });
+      throw error;
+    }
     return { id: inserted.id };
   });
 
