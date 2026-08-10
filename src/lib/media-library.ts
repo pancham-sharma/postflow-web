@@ -119,7 +119,7 @@ export function createUserPostStoragePath(userId: string, fileName: string): str
   const safeName = sanitizeFileName(fileName);
   const postScope = crypto.randomUUID();
   const objectId = crypto.randomUUID();
-  return `users/${userId}/posts/${postScope}/${objectId}-${safeName}`;
+  return `${userId}/posts/${postScope}/${objectId}-${safeName}`;
 }
 
 /** Reads intrinsic dimensions/duration in the browser so the record is accurate. */
