@@ -246,26 +246,32 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
       );
     });
 
+    const hasBlockedDestination = validations.some((validation) => validation.status === "blocked");
     for (const validation of validations) {
       await supabaseAdmin
         .from("social_post_destinations")
         .update({
           validation_status: validation.status,
           validation_issues: validation.issues as never,
-          publish_status: validation.status === "blocked" ? "failed" : "queued",
-          ...(validation.status === "blocked"
+          publish_status: hasBlockedDestination ? "failed" : "queued",
+          ...(hasBlockedDestination
             ? {
                 error_code: "validation_failed",
                 error_message:
                   validation.issues.find((i) => !i.canAutoFix)?.message ??
-                  "This destination cannot be published.",
+                  "Another selected platform needs attention before publishing.",
               }
             : {}),
         })
         .eq("id", validation.destinationId);
     }
 
-    const publishable = validations.filter((v) => v.status !== "blocked");
+    // Publishing is all-or-nothing for the selected destinations. A separate
+    // explicit "publish available" action can be added later; the normal
+    // Publish Now flow must never silently drop a selected platform.
+    const publishable = hasBlockedDestination
+      ? []
+      : validations.filter((v) => v.status !== "blocked");
     const { data: job, error: jobError } = await supabaseAdmin
       .from("publishing_jobs")
       .insert({

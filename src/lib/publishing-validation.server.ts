@@ -81,9 +81,12 @@ export function validateDestination(
       issues.push(issue("platform_paused", capability.notice ?? "This platform is temporarily paused."));
     }
     const missingScopes = capability.required_scopes.filter((scope) => !subject.accountScopes.includes(scope));
-    if (subject.accountScopes.length > 0 && missingScopes.length > 0) {
+    if (missingScopes.length > 0) {
       issues.push(
-        issue("scope_missing", "The selected account does not have publishing permission. Reauthorize it."),
+        issue(
+          "scope_missing",
+          `Reconnect ${subject.platform} and approve the publishing permissions required for this account.`,
+        ),
       );
     }
   }

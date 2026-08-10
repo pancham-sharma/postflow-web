@@ -182,6 +182,11 @@ const PlatformCard = memo(function PlatformCard({
                     onChange={(e) => set(field.key, e.target.value)}
                   />
                 )}
+                {invalid && (
+                  <span className="mt-1 block text-xs text-destructive">
+                    {issues.find((issue) => issue.field === field.key)?.message}
+                  </span>
+                )}
               </Row>
             );
           })}

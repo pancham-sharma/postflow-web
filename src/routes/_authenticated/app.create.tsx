@@ -537,20 +537,17 @@ function CreatePost() {
     const blockedCards = targets.filter(
       (t) => validatePlatformContent(t.platform, cardOf(t.id), { hasMedia: !!file }).length > 0,
     );
-    if (blockedCards.length === targets.length) {
-      toast.error("Fix the highlighted fields in your platform cards first.");
-      return;
-    }
     if (blockedCards.length > 0) {
-      toast.warning(
-        `${blockedCards.length} platform card${blockedCards.length === 1 ? "" : "s"} still ha${
-          blockedCards.length === 1 ? "s" : "ve"
-        } issues and will be skipped.`,
-      );
+      const summaries = blockedCards.map((t) => {
+        const name = platformMap[t.platform]?.name ?? t.platform;
+        const first = validatePlatformContent(t.platform, cardOf(t.id), { hasMedia: !!file })[0];
+        return `${name}: ${first?.message ?? "needs attention"}`;
+      });
+      toast.error(summaries.join(" | "));
+      return;
     }
 
     const destinations = targets
-      .filter((t) => !blockedCards.some((b) => b.id === t.id))
       .map((t) => {
         const card = cardOf(t.id);
         // The music destination policy decides whether this platform gets the
@@ -588,7 +585,7 @@ function CreatePost() {
         };
       });
     if (destinations.length === 0) {
-      toast.error("Fix the highlighted fields in your platform cards first.");
+      toast.error("Select at least one platform with valid required content.");
       return;
     }
     if (mode === "schedule" && !values.scheduledFor) {
@@ -638,11 +635,16 @@ function CreatePost() {
 
       const blocked = result.validations.filter((v) => v.status === "blocked");
       if (blocked.length > 0) {
-        toast.error(
-          `${blocked.length} destination${blocked.length === 1 ? "" : "s"} could not be published: ${
-            blocked[0]?.issues[0]?.message ?? "check the requirements."
-          }`,
-        );
+        const messages = blocked.map((validation) => {
+          const name = platformMap[validation.platform]?.name ?? validation.platform;
+          const reconnect = validation.issues.some((item) =>
+            ["scope_missing", "account_disconnected", "token_expired"].includes(item.code),
+          );
+          return reconnect
+            ? `Reconnect ${name}.`
+            : `${name}: ${validation.issues[0]?.message ?? "needs attention."}`;
+        });
+        toast.error(messages.join(" | "));
       }
       const queued = result.validations.length - blocked.length;
       if (queued > 0) {
