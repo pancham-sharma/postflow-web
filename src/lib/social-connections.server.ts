@@ -11,6 +11,27 @@ async function db() {
   return supabaseAdmin;
 }
 
+function logSupabaseOAuthError(args: {
+  operation: string;
+  table: string;
+  provider: SocialPlatform;
+  userId?: string | null;
+  workspaceId?: string | null;
+  error: { code?: string; message?: string; details?: string; hint?: string };
+}) {
+  console.error("[OAUTH_SUPABASE_OPERATION_FAILED]", {
+    operation: args.operation,
+    table: args.table,
+    provider: args.provider,
+    userIdPresent: Boolean(args.userId),
+    workspaceIdPresent: Boolean(args.workspaceId),
+    errorCode: args.error.code ?? "unknown",
+    errorMessage: args.error.message ?? "unknown",
+    errorDetails: args.error.details ?? null,
+    errorHint: args.error.hint ?? null,
+  });
+}
+
 function toConnection(row: any): SocialConnection {
   return {
     id: row.id,
@@ -119,6 +140,14 @@ export async function saveConnection(
     .select("id")
     .single();
   if (error) {
+    logSupabaseOAuthError({
+      operation: "social_connection_upsert",
+      table: "social_connections",
+      provider: platform,
+      userId,
+      workspaceId,
+      error,
+    });
     console.error("[SOCIAL_CONNECTION_DB_WRITE_FAILED]", {
       table: "social_connections",
       operation: "upsert",
@@ -130,13 +159,24 @@ export async function saveConnection(
     throw error;
   }
 
-  await supabase.from("social_account_events").insert({
+  const { error: eventError } = await supabase.from("social_account_events").insert({
     workspace_id: workspaceId,
     social_account_id: data.id,
     event_type: "connected",
     event_data: { platform, account_type: identity.accountType ?? null },
     created_by: userId,
   });
+  if (eventError) {
+    logSupabaseOAuthError({
+      operation: "social_account_event_insert",
+      table: "social_account_events",
+      provider: platform,
+      userId,
+      workspaceId,
+      error: eventError,
+    });
+    throw eventError;
+  }
 
   // Facebook: rebuild permissions and Page credentials from the NEW user token
   // so a reconnect never keeps working with the previous connection's state.
@@ -304,6 +344,14 @@ export async function createOAuthState(input: OAuthStateInput) {
     expires_at: new Date(Date.now() + (input.ttlMinutes ?? 15) * 60 * 1000).toISOString(),
   });
   if (error) {
+    logSupabaseOAuthError({
+      operation: "oauth_state_insert",
+      table: "oauth_states",
+      provider: input.platform,
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+      error,
+    });
     console.error("[OAUTH_STATE_INSERT_FAILED]", {
       operation: "oauth_state_insert",
       table: "oauth_states",

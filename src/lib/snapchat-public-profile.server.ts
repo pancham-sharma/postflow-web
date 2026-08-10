@@ -99,6 +99,26 @@ async function db() {
   return supabaseAdmin;
 }
 
+function logDatabaseError(args: {
+  operation: string;
+  table: string;
+  userId?: string | null;
+  workspaceId?: string | null;
+  error: { code?: string; message?: string; details?: string; hint?: string };
+}) {
+  console.error("[SNAP_PP_SUPABASE_OPERATION_FAILED]", {
+    operation: args.operation,
+    table: args.table,
+    provider: "snapchat",
+    userIdPresent: Boolean(args.userId),
+    workspaceIdPresent: Boolean(args.workspaceId),
+    errorCode: args.error.code ?? "unknown",
+    errorMessage: args.error.message ?? "unknown",
+    errorDetails: args.error.details ?? null,
+    errorHint: args.error.hint ?? null,
+  });
+}
+
 // ------------------------------------------------------------- connection
 
 export type PublicProfileConnection = {
@@ -167,15 +187,36 @@ async function readTokens(userId: string) {
 
 async function patchConnection(userId: string, patch: Record<string, unknown>) {
   const supabase = await db();
-  await supabase
+  const { error } = await supabase
     .from("snapchat_public_profile_connections")
     .update({ ...patch, updated_at: new Date().toISOString() } as never)
     .eq("user_id", userId);
+  if (error) {
+    logDatabaseError({
+      operation: "snapchat_connection_update",
+      table: "snapchat_public_profile_connections",
+      userId,
+      error,
+    });
+    throw error;
+  }
 }
 
 export async function disconnect(userId: string) {
   const supabase = await db();
-  await supabase.from("snapchat_public_profile_connections").delete().eq("user_id", userId);
+  const { error } = await supabase
+    .from("snapchat_public_profile_connections")
+    .delete()
+    .eq("user_id", userId);
+  if (error) {
+    logDatabaseError({
+      operation: "snapchat_connection_delete",
+      table: "snapchat_public_profile_connections",
+      userId,
+      error,
+    });
+    throw error;
+  }
 }
 
 // ------------------------------------------------------------------ OAuth
@@ -304,6 +345,13 @@ export async function storeConnection(args: {
     { onConflict: "user_id" },
   );
   if (error) {
+    logDatabaseError({
+      operation: "snapchat_connection_upsert",
+      table: "snapchat_public_profile_connections",
+      userId: args.userId,
+      workspaceId: args.workspaceId,
+      error,
+    });
     console.error("[SNAP_PP_DB_INSERT_FAILED]", {
       table: "snapchat_public_profile_connections",
       operation: "upsert",

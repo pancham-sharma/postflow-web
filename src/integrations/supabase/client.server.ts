@@ -34,8 +34,12 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 
 function createSupabaseAdminClient() {
   const SUPABASE_URL = process.env["SUPABASE_URL"];
-  const SUPABASE_PRIVILEGED_KEY =
-    process.env["SUPABASE_SECRET_KEY"] || process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  const configuredKeys = [process.env["SUPABASE_SECRET_KEY"], process.env["SUPABASE_SERVICE_ROLE_KEY"]]
+    .map((value) => (value ?? "").trim())
+    .filter(Boolean);
+  // Prefer an actual privileged key. This avoids accidentally selecting a
+  // stale publishable value when Render has both variables configured.
+  const SUPABASE_PRIVILEGED_KEY = configuredKeys.find((value) => !value.startsWith("sb_publishable_")) ?? "";
 
   if (!SUPABASE_URL || !SUPABASE_PRIVILEGED_KEY) {
     const missing = [
@@ -52,6 +56,12 @@ function createSupabaseAdminClient() {
       "SUPABASE_SECRET_KEY must be a privileged server key, not the browser publishable key.",
     );
   }
+
+  console.info("[SUPABASE_SERVER_CONFIG]", {
+    supabase_url_configured: true,
+    privileged_key_configured: true,
+    privileged_key_type: SUPABASE_PRIVILEGED_KEY.startsWith("sb_secret_") ? "secret" : "service_role",
+  });
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PRIVILEGED_KEY, {
     global: {
