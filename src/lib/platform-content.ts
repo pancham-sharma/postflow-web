@@ -104,7 +104,9 @@ export const PLATFORM_FIELDS: Record<SocialPlatform, FieldDef[]> = {
     f({ key: "pinnedComment", label: "Pinned comment", kind: "textarea", max: 2000 }),
   ],
   snapchat: [
-    f({ key: "caption", label: "Caption", kind: "textarea", max: 250, placeholder: "Short Snapchat caption" }),
+    f({ key: "caption", label: "Caption", kind: "textarea", max: 160, placeholder: "Short Snapchat Spotlight caption (Spotlight only)" }),
+    f({ key: "hashtags", label: "Hashtags", kind: "list", maxItems: 5, placeholder: "#trending #snapchat" }),
+    f({ key: "trendingHashtags", label: "Trending-style hashtag suggestions", kind: "list", maxItems: 5, help: "Estimated suggestions — not verified live trends" }),
     f({ key: "overlayText", label: "Overlay text", kind: "text", max: 80, placeholder: "Text shown over the snap" }),
     f({ key: "callToAction", label: "Call to action", kind: "text", max: 80, placeholder: "Swipe up" }),
     f({ key: "destinationUrl", label: "Attachment link", kind: "text", max: 2000 }),
