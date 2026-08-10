@@ -57,6 +57,16 @@ const createPostInput = z.object({
   idempotencyKey: z.string().min(8).max(120),
 });
 
+const POST_MEDIA_OBJECT_MAX_BYTES = 512 * 1024 * 1024;
+
+function jsonByteSize(value: unknown): number {
+  try {
+    return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  } catch {
+    return 0;
+  }
+}
+
 /** Creates the post, its destinations and a queued job, then validates each destination. */
 export const createAndQueuePost = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -73,6 +83,13 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
     );
 
     const workspaceId = await resolveWorkspaceId(userId);
+    console.info("[POST_CREATE]", {
+      request_size: jsonByteSize({ ...data, media: data.media ? { ...data.media } : null }),
+      media_size: data.media?.fileSize ?? 0,
+      media_mime: data.media?.mimeType ?? null,
+      media_id: data.media?.storagePath ?? null,
+      platforms: data.destinations.map((destination) => destination.platform),
+    });
 
     // Idempotency: the same key returns the existing job instead of duplicating.
     const { data: existing } = await supabaseAdmin
@@ -84,6 +101,9 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
     if (existing) return { postId: existing.post_id, jobId: existing.id, validations: [] as ValidationResult[] };
 
     if (data.media) {
+      if (data.media.fileSize > POST_MEDIA_OBJECT_MAX_BYTES) {
+        throw new Error("This media file exceeds the post-media storage limit of 512 MiB.");
+      }
       if (!isAllowedMimeType(data.media.mimeType)) {
         throw new Error("That file type is not supported.");
       }
@@ -272,6 +292,15 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
     const publishable = hasBlockedDestination
       ? []
       : validations.filter((v) => v.status !== "blocked");
+    console.info("[PUBLISH_JOB]", {
+      payload_size: jsonByteSize({
+        post_id: post.id,
+        platforms: validations.map((validation) => validation.platform),
+        media_id: data.media?.storagePath ?? null,
+      }),
+      media_size: data.media?.fileSize ?? 0,
+      platforms: validations.map((validation) => validation.platform),
+    });
     const { data: job, error: jobError } = await supabaseAdmin
       .from("publishing_jobs")
       .insert({

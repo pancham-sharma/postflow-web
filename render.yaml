@@ -19,10 +19,18 @@ services:
         sync: false
       - key: SOCIAL_TOKEN_ENC_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        value: gpt-5.6-terra
+        value: gpt-4.1-mini
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: openai/gpt-4o-mini
       - key: LOVABLE_API_KEY
         sync: false
       - key: META_OAUTH_CLIENT_ID

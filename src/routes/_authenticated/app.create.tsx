@@ -51,6 +51,7 @@ import { listMusicTracks } from "@/lib/music.functions";
 import {
   applyMusicDestinationPolicy,
   checkMusicRights,
+  compactPlatformAudio,
   defaultPlatformAudio,
   withAttribution,
   type MusicTrack,
@@ -65,6 +66,7 @@ import {
 } from "@/lib/platform-content";
 import { generatePlatformContent } from "@/lib/ai-content.functions";
 import { generateSourceIdeaForPlatform } from "@/lib/source-idea.functions";
+import { formatBytes, validateFile } from "@/lib/media-library";
 import {
   applyGeneratedContent,
   cardHasContent,
@@ -85,8 +87,6 @@ export const Route = createFileRoute("/_authenticated/app/create")({
   }),
   component: CreatePost,
 });
-
-const MAX_BYTES = 500 * 1024 * 1024;
 
 function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -306,6 +306,7 @@ function CreatePost() {
   }
 
   async function generateOne(cardId: string) {
+    if (generatingCardId || generatingAll) return;
     setGeneratingCardId(cardId);
     try {
       await runGenerate([cardId]);
@@ -318,6 +319,7 @@ function CreatePost() {
   }
 
   async function generateEverything() {
+    if (generatingAll || generatingCardId) return;
     setGeneratingAll(true);
     try {
       await runGenerate(targets.map((t) => t.id));
@@ -336,6 +338,7 @@ function CreatePost() {
   }
 
   function startSourceIdeaGeneration() {
+    if (genStatus === "loading") return;
     const values = details.current;
     if (values.title.trim().length < 3) {
       toast.error("Enter a title first.");
@@ -464,8 +467,9 @@ function CreatePost() {
 
   function pickFile(next: File | null) {
     if (!next) return;
-    if (next.size > MAX_BYTES) {
-      toast.error("That file is larger than 500 MB.");
+    const fileCheck = validateFile(next);
+    if ("error" in fileCheck) {
+      toast.error(fileCheck.error);
       return;
     }
     const url = URL.createObjectURL(next);
@@ -508,6 +512,11 @@ function CreatePost() {
 
   async function uploadMedia() {
     if (!file) return null;
+    console.info("[MEDIA_UPLOAD]", {
+      stage: "storage_upload",
+      file_size: file.size,
+      mime: file.type || "application/octet-stream",
+    });
     const { data: userData } = await supabase.auth.getUser();
     const uid = userData.user?.id;
     if (!uid) throw new Error("Your session expired — sign in again.");
@@ -518,7 +527,14 @@ function CreatePost() {
       upsert: false,
       contentType: file.type || "application/octet-stream",
     });
-    if (error) throw error;
+    if (error) {
+      if (/maximum allowed size/i.test(error.message)) {
+        throw new Error(
+          `This file is ${formatBytes(file.size)}. The post-media storage limit is 512 MiB.`,
+        );
+      }
+      throw error;
+    }
     return path;
   }
 
@@ -553,9 +569,10 @@ function CreatePost() {
         // The music destination policy decides whether this platform gets the
         // added music at all; non-destinations reuse the original upload.
         const audio = applyMusicDestinationPolicy(audioOf(t.id), t.platform);
+        const publishAudio = compactPlatformAudio(audio);
         // Required credits are added to the published description automatically.
-        const description = audio.attributionText
-          ? withAttribution(card.description, audio.attributionText)
+        const description = publishAudio.attributionText
+          ? withAttribution(card.description, publishAudio.attributionText)
           : card.description;
         return {
           socialAccountId: t.accountId,
@@ -580,7 +597,7 @@ function CreatePost() {
           settings: {
             ...card.settings,
             ...(t.platform === "youtube" ? { ...youtubeOptions } : {}),
-            audio,
+            audio: publishAudio,
           },
         };
       });

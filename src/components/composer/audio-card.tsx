@@ -24,6 +24,7 @@ import { inputCls } from "@/components/form-styles";
 import { platformMap } from "@/lib/postflow-data";
 import { SOCIAL_PLATFORMS, type SocialPlatform } from "@/lib/social-platforms";
 import { registerUserTrack } from "@/lib/music.functions";
+import { formatBytes } from "@/lib/media-library";
 import {
   COPYRIGHT_DISCLAIMER,
   LICENCE_TYPES,
@@ -47,6 +48,19 @@ const toneCls: Record<BadgeTone, string> = {
   danger: "bg-destructive/10 text-destructive",
   info: "bg-muted text-muted-foreground",
 };
+
+const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+const ALLOWED_AUDIO_MIME = ["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm"];
+
+function validateAudioUpload(file: File): string | null {
+  if (!ALLOWED_AUDIO_MIME.includes(file.type || "")) {
+    return `${file.name}: unsupported audio type (${file.type || "unknown"}).`;
+  }
+  if (file.size > MAX_AUDIO_BYTES) {
+    return `${file.name} is ${formatBytes(file.size)}. The music upload limit is ${formatBytes(MAX_AUDIO_BYTES)}.`;
+  }
+  return null;
+}
 
 export function Badge({ label, tone }: { label: string; tone: BadgeTone }) {
   return (
@@ -146,6 +160,11 @@ function OwnAudioForm({ onCreated }: { onCreated: (track: MusicTrack) => void })
       toast.error("Choose or record an audio file first.");
       return;
     }
+    const fileError = validateAudioUpload(file);
+    if (fileError) {
+      toast.error(fileError);
+      return;
+    }
     if (!confirmed) {
       toast.error(UPLOAD_CONFIRMATION);
       return;
@@ -161,11 +180,23 @@ function OwnAudioForm({ onCreated }: { onCreated: (track: MusicTrack) => void })
       if (!uid) throw new Error("Your session expired — sign in again.");
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${uid}/${Date.now()}-${safeName}`;
+      console.info("[AUDIO_UPLOAD]", {
+        stage: "music_storage_upload",
+        file_size: file.size,
+        mime: file.type || "audio/mpeg",
+      });
       const { error } = await supabase.storage.from("music").upload(path, file, {
         contentType: file.type || "audio/mpeg",
         upsert: false,
       });
-      if (error) throw error;
+      if (error) {
+        if (/maximum allowed size/i.test(error.message)) {
+          throw new Error(
+            `This audio file is ${formatBytes(file.size)}. The music upload limit is ${formatBytes(MAX_AUDIO_BYTES)}.`,
+          );
+        }
+        throw error;
+      }
 
       const hash = await sha256(file);
       const duration = await new Promise<number>((resolve) => {
@@ -225,6 +256,14 @@ function OwnAudioForm({ onCreated }: { onCreated: (track: MusicTrack) => void })
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0] ?? null;
+              if (f) {
+                const fileError = validateAudioUpload(f);
+                if (fileError) {
+                  toast.error(fileError);
+                  e.currentTarget.value = "";
+                  return;
+                }
+              }
               setFile(f);
               if (f && !title) setTitle(f.name.replace(/\.[^.]+$/, ""));
             }}

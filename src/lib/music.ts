@@ -301,6 +301,30 @@ export const defaultPlatformAudio: PlatformAudio = {
   ducking: { ...defaultDucking },
 };
 
+function compactTrack(track: MusicTrack | null): MusicTrack | null {
+  if (!track) return null;
+  return {
+    ...track,
+    // Signed storage URLs are preview-only and expire. Publish settings should
+    // keep the storage key; the server mints a fresh signed URL when rendering.
+    audioUrl: track.audioPath ? null : track.audioUrl,
+    coverUrl: null,
+  };
+}
+
+function compactLaneTrack<T extends TrackState>(lane: T): T {
+  return { ...lane, track: compactTrack(lane.track) } as T;
+}
+
+export function compactPlatformAudio(audio: PlatformAudio): PlatformAudio {
+  return {
+    ...audio,
+    track: compactTrack(audio.track),
+    voice: compactLaneTrack(audio.voice),
+    sfx: compactLaneTrack(audio.sfx),
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Mix presets                                                          */
 /* ------------------------------------------------------------------ */

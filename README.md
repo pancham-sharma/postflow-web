@@ -442,16 +442,19 @@ Public Profile, YouTube resumable state, indexes).
 ## 12. AI features
 
 All AI runs through the server-only provider in `src/lib/ai-provider.server.ts`.
-`OPENAI_API_KEY` is the primary provider credential and `OPENAI_MODEL`
-selects the model (default: `gpt-5.6-terra`). The existing Lovable AI Gateway
-remains an optional fallback when `OPENAI_API_KEY` is not configured. Neither
-credential is exposed to browser code.
+When configured, `GEMINI_API_KEY` (a Google Vertex AI Express Mode key) is the
+primary provider credential and `GEMINI_MODEL` selects the model (default:
+`gemini-2.5-flash`). `OPENAI_API_KEY`/`OPENAI_MODEL` remain the first fallback
+(default model: `gpt-4.1-mini`), followed by OpenRouter
+(`OPENROUTER_MODEL`, default: `openai/gpt-4o-mini`). The existing Lovable AI
+Gateway remains the final fallback. These credentials are never exposed to
+browser code.
 
 | Feature                                                              | Where                                                            | Provider/model                    |
 | -------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------- |
-| Per-platform caption / hashtag writer ("Generate for all platforms") | `src/lib/ai-content.functions.ts`                                | OpenAI / `OPENAI_MODEL`          |
-| Title generator                                                      | `src/lib/title-generator.functions.ts`                           | OpenAI / `OPENAI_MODEL`          |
-| Source-idea generator                                                | `src/lib/source-idea.server.ts` + `/api/ai/source-idea/generate` | OpenAI / `OPENAI_MODEL`          |
+| Per-platform caption / hashtag writer ("Generate for all platforms") | `src/lib/ai-content.functions.ts`                                | Gemini / `GEMINI_MODEL` (OpenAI fallback) |
+| Title generator                                                      | `src/lib/title-generator.functions.ts`                           | Gemini / `GEMINI_MODEL` (OpenAI fallback) |
+| Source-idea generator                                                | `src/lib/source-idea.server.ts` + `/api/ai/source-idea/generate` | Gemini / `GEMINI_MODEL` (OpenAI fallback) |
 | Audio ducking suggestions                                            | `src/lib/audio-render.server.ts` (media processor)               | rules + processor                |
 
 Provider errors are converted to safe user messages for quota, rate-limit,
@@ -467,8 +470,12 @@ Stored as backend secrets and read inside server handlers only.
 
 | Secret name                             | Used for                                                                                       |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `OPENAI_API_KEY`                        | OpenAI AI-writing provider (server-only)                                                       |
-| `OPENAI_MODEL`                          | Optional model override; defaults to `gpt-5.6-terra`                                          |
+| `GEMINI_API_KEY`                        | Google Gemini/Vertex AI AI-writing provider (server-only; primary when set)                   |
+| `GEMINI_MODEL`                          | Optional Gemini model override; defaults to `gemini-2.5-flash`                                |
+| `OPENAI_API_KEY`                        | OpenAI AI-writing provider (server-only fallback)                                              |
+| `OPENAI_MODEL`                          | Optional OpenAI model override; defaults to `gpt-4.1-mini`                                   |
+| `OPENROUTER_API_KEY`                    | OpenRouter AI-writing fallback (server-only)                                                  |
+| `OPENROUTER_MODEL`                      | Optional OpenRouter model; defaults to `openai/gpt-4o-mini`                                    |
 | `LOVABLE_API_KEY`                       | Lovable AI Gateway (managed; rotate from Lovable, not in code)                                 |
 | `SUPABASE_SECRET_KEY`                   | Privileged PostFlow server operations (server-only; legacy alias: `SUPABASE_SERVICE_ROLE_KEY`) |
 | `YOUTUBE_OAUTH_CLIENT_ID`               | YouTube publishing OAuth                                                                       |
