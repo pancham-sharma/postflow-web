@@ -168,7 +168,7 @@ export const providers: Record<SocialPlatform, ProviderConfig> = {
     clientSecretEnv: "META_OAUTH_CLIENT_SECRET",
     configurationIdEnv: FACEBOOK_CONFIGURATION_ID_ENV,
     omitScopes: true,
-    supportsRefresh: false,
+    supportsRefresh: true,
     identity: async (token) => {
       const me = await providerJson(
         "facebook",

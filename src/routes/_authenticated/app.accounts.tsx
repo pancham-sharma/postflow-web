@@ -685,8 +685,7 @@ function AccountsPage() {
               (testMutation.isPending && testMutation.variables === acc.id) ||
               (disconnectMutation.isPending && disconnectMutation.variables === acc.id);
             const test = testResults[acc.id];
-            const snapchatNeedsReconnect =
-              acc.platform === "snapchat" && (acc.status !== "connected" || test?.ok === false);
+            const snapchatNeedsReconnect = false;
             return (
               <article key={acc.id} className="rounded-2xl border border-border p-5">
                 <div className="flex items-center gap-3">
@@ -802,7 +801,7 @@ function AccountsPage() {
                         )}
                         aria-hidden
                       />
-                      Refresh token
+                      Reconnect
                     </button>
                   ) : (
                     <button
