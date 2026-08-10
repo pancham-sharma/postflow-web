@@ -270,10 +270,27 @@ export type OAuthStateInput = {
 /** Stores only a hash of the state, bound to user + workspace + platform. */
 export async function createOAuthState(input: OAuthStateInput) {
   const supabase = await db();
+  const { data: membership, error: membershipError } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("workspace_id", input.workspaceId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (membershipError) throw membershipError;
+  if (!membership) throw new Error("The authenticated user is not a member of this workspace.");
+
   // Drop states that already expired so the table stays tidy.
   await supabase.from("oauth_states").delete().lt("expires_at", new Date().toISOString());
 
   const hash = hashOAuthState(input.state);
+  console.info("[OAUTH_STATE_INSERT]", {
+    operation: "oauth_state_insert",
+    table: "oauth_states",
+    platform: input.platform,
+    user_id_present: Boolean(input.userId),
+    workspace_id_present: Boolean(input.workspaceId),
+    using_admin_client: true,
+  });
   const { error } = await supabase.from("oauth_states").insert({
     state: hash,
     state_hash: hash,
@@ -286,7 +303,19 @@ export async function createOAuthState(input: OAuthStateInput) {
     existing_account_id: input.existingAccountId,
     expires_at: new Date(Date.now() + (input.ttlMinutes ?? 15) * 60 * 1000).toISOString(),
   });
-  if (error) throw error;
+  if (error) {
+    console.error("[OAUTH_STATE_INSERT_FAILED]", {
+      operation: "oauth_state_insert",
+      table: "oauth_states",
+      platform: input.platform,
+      user_id_present: Boolean(input.userId),
+      workspace_id_present: Boolean(input.workspaceId),
+      using_admin_client: true,
+      error_code: error.code ?? "unknown",
+      error_message: error.message,
+    });
+    throw error;
+  }
 }
 
 export type ConsumedOAuthState =
@@ -318,6 +347,21 @@ export async function consumeOAuthState(
     return { ok: false, reason: "state_expired" };
   }
 
+  // The callback is unauthenticated at the browser boundary, so re-check the
+  // state owner's workspace membership before accepting provider credentials.
+  // This keeps the trusted admin client from turning a forged/stale state into
+  // an account owned by an unrelated workspace.
+  if (data.workspace_id) {
+    const { data: membership, error: membershipError } = await supabase
+      .from("workspace_members")
+      .select("workspace_id")
+      .eq("workspace_id", data.workspace_id)
+      .eq("user_id", data.user_id)
+      .maybeSingle();
+    if (membershipError) throw membershipError;
+    if (!membership) return { ok: false, reason: "state_invalid" };
+  }
+
   const { data: claimed, error: claimError } = await supabase
     .from("oauth_states")
     .update({ consumed_at: new Date().toISOString() })
@@ -327,6 +371,12 @@ export async function consumeOAuthState(
     .maybeSingle();
   if (claimError) throw claimError;
   if (!claimed) return { ok: false, reason: "state_reused" };
+
+  const { error: deleteError } = await supabase
+    .from("oauth_states")
+    .delete()
+    .eq("state_hash", hash);
+  if (deleteError) throw deleteError;
 
   return {
     ok: true,
