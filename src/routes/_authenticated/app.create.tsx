@@ -35,6 +35,7 @@ import {
   setComposerMedia,
   updateComposerMediaMeta,
 } from "@/lib/composer-media-cache";
+import { useJobRealtime } from "@/hooks/use-job-realtime";
 import {
   emptyPostDetails,
   PostDetailsSection,
@@ -109,6 +110,8 @@ function CreatePost() {
   const dispatchPost = useServerFn(dispatchPublishingJob);
   const generateContent = useServerFn(generatePlatformContent);
   const fetchPostForReuse = useServerFn(getPostForReuse);
+
+  useJobRealtime([[...dashboardKeys.legacy()], ["social-connections"]]);
 
   const { data, isLoading } = useQuery({
     queryKey: dashboardKeys.legacy(),

@@ -223,6 +223,34 @@ html {
   animation-delay: var(--reveal-delay, 0ms);
 }
 
+@layer utilities {
+  .clip-bottom {
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--radius-xl)), 0 100%);
+  }
+}
+
+/* Reduced motion: disable animations for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+
 @keyframes reveal-in {
   from {
     opacity: 0.72;
@@ -234,17 +262,7 @@ html {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
 
-  .reveal {
-    opacity: 1;
-    transform: none;
-    animation: none;
-  }
-}
 
 /* Audio studio: circular volume slider thumb */
 input[type="range"].audio-volume-slider::-webkit-slider-thumb {

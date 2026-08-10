@@ -8,6 +8,7 @@ import { cancelPostSchedule, listPosts, reschedulePost, type PostRow } from "@/l
 import { SOCIAL_PLATFORMS } from "@/lib/social-platforms";
 import { POST_STATUS_LABEL } from "@/lib/publishing-types";
 import { cn } from "@/lib/utils";
+import { useJobRealtime } from "@/hooks/use-job-realtime";
 
 export const Route = createFileRoute("/_authenticated/app/calendar")({
   head: () => ({
@@ -58,6 +59,9 @@ function CalendarPage() {
   const [platform, setPlatform] = useState<string>("all");
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [dragId, setDragId] = useState<string | null>(null);
+  const [selectedPost, setSelectedPost] = useState<PostRow | null>(null);
+
+  useJobRealtime([["calendar-posts"]]);
 
   const range = useMemo(() => {
     if (view === "Day") return { start: startOfDay(cursor), days: 1 };

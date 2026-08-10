@@ -88,9 +88,9 @@ export function SnapchatPublicProfileCard() {
   if (!data?.configured) {
     return (
       <section className="rounded-2xl border border-dashed border-border p-4 text-sm">
-        <h3 className="font-semibold">Snapchat automatic publishing</h3>
+        <h3 className="font-semibold">Snapchat Public Profile API</h3>
         <p className="pt-1 text-xs text-muted-foreground">
-          Not configured on the server. Snapchat posts use manual sharing.
+          Setup required — add SNAPCHAT_PUBLIC_PROFILE_CLIENT_ID and SECRET to Render environment variables.
         </p>
       </section>
     );

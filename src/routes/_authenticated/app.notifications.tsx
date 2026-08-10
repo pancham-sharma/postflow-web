@@ -11,6 +11,17 @@ import {
   markNotificationsRead,
 } from "@/lib/notifications.functions";
 import { cn } from "@/lib/utils";
+import { platforms } from "@/lib/postflow-data";
+
+function getNotificationIcon(title: string, message: string) {
+  const text = (title + " " + message).toLowerCase();
+  for (const p of platforms) {
+    if (text.includes(p.name.toLowerCase())) {
+      return { Icon: p.icon, color: "text-primary" };
+    }
+  }
+  return { Icon: Bell, color: "text-muted-foreground" };
+}
 
 export const Route = createFileRoute("/_authenticated/app/notifications")({
   head: () => ({
@@ -141,7 +152,10 @@ function NotificationsPage() {
               key={n.id}
               className={cn("flex gap-3 rounded-2xl p-4", !n.readAt ? "surface-strong" : "border border-border")}
             >
-              <Bell className="mt-0.5 size-4.5 shrink-0" aria-hidden />
+              {(() => {
+                const { Icon, color } = getNotificationIcon(n.title, n.message);
+                return <Icon className={cn("mt-0.5 size-4.5 shrink-0", color)} aria-hidden />;
+              })()}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{n.title}</p>
                 <p className="mt-0.5 text-sm opacity-85">{n.message}</p>

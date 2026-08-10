@@ -43,6 +43,7 @@ import {
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/utils";
 import { uploadViaResumableTus } from "@/lib/tus-upload";
+import { useJobRealtime } from "@/hooks/use-job-realtime";
 
 export const Route = createFileRoute("/_authenticated/app/media")({
   // ?upload=1 comes from the dashboard "Upload media" quick action.
@@ -87,9 +88,11 @@ function MediaLibraryPage() {
   const purge = useServerFn(purgeMediaAssets);
   const addFolder = useServerFn(createMediaFolder);
   const renameFolder = useServerFn(renameMediaFolder);
-  const removeFolder = useServerFn(deleteMediaFolder);
+  const deleteFolder = useServerFn(deleteMediaFolder);
   const signUrl = useServerFn(getMediaSignedUrl);
   const clearUnused = useServerFn(clearUnusedMedia);
+
+  useJobRealtime([["media-library"], ["media-assets"]]);
 
   const [filter, setFilter] = useState<Filter>("All");
   const [folderId, setFolderId] = useState<string | null>(null);
@@ -553,7 +556,7 @@ function MediaLibraryPage() {
               onClick={async () => {
                 if (!window.confirm(`Delete the folder "${f.name}"?`)) return;
                 try {
-                  await removeFolder({ data: { id: f.id } });
+                  await deleteFolder({ data: { id: f.id } });
                   if (folderId === f.id) setFolderId(null);
                   toast.success("Folder deleted.");
                   invalidate();

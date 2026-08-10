@@ -14,6 +14,7 @@ import {
   testConnection,
 } from "@/lib/social-connections.functions";
 import { checkConnectionHealthFn } from "@/lib/social-connections.functions";
+import { useJobRealtime } from "@/hooks/use-job-realtime";
 import { platformMap, platforms } from "@/lib/postflow-data";
 import type { SocialConnection, SocialPlatform } from "@/lib/social-platforms";
 import { FacebookPagePicker } from "@/components/accounts/facebook-page-picker";
@@ -167,6 +168,7 @@ function AccountsPage() {
   const router = useRouter();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  useJobRealtime([["social-connections"]]);
   const fetchConnections = useServerFn(listMyConnections);
   const startConnect = useServerFn(startPlatformConnect);
   const doRefresh = useServerFn(refreshConnection);
@@ -470,8 +472,6 @@ function AccountsPage() {
           </button>
         </section>
       )}
-
-      <SnapchatPublicProfileCard />
 
       {instagramStatus && !instagramStatus.configured ? (
         <div className="space-y-3 rounded-2xl border border-border p-4 text-sm">
@@ -897,6 +897,9 @@ function AccountsPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Connect a platform</h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="md:col-span-2 xl:col-span-3">
+            <SnapchatPublicProfileCard />
+          </div>
           {available.map((p) => (
             <article key={p.key} className="surface-strong rounded-2xl p-5">
               <div className="flex items-center gap-3">
