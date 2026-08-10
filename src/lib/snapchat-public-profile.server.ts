@@ -693,9 +693,10 @@ export type MediaProcessingState = "pending" | "processing" | "ready" | "failed"
 
 export async function getMediaState(
   accessToken: string,
+  publicProfileId: string,
   mediaId: string,
 ): Promise<{ state: MediaProcessingState; retryAfter: number | null }> {
-  const result = await apiFetch(accessToken, `/media/${mediaId}`);
+  const result = await apiFetch(accessToken, `/public_profiles/${publicProfileId}/media/${mediaId}`);
   if (result.status === 429) return { state: "processing", retryAfter: result.retryAfter };
   if (result.status >= 400) {
     throwForStatus(result.status, result.retryAfter, "SNAPCHAT_MEDIA_PROCESSING_FAILED");
@@ -710,18 +711,25 @@ export async function getMediaState(
   return { state: "processing", retryAfter: result.retryAfter };
 }
 
-/** Bounded polling: never hammers Snapchat, never blocks a worker forever. */
 export async function waitForMedia(
   accessToken: string,
+  publicProfileId: string,
   mediaId: string,
   opts: { timeoutMs?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<void> {
-  // Snapchat's FINALIZE response is the authoritative readiness signal for a
-  // Public Profile media object; the Public Profile API does not expose the
-  // generic `/media/{id}` status endpoint used by older implementations.
-  void accessToken;
-  void mediaId;
-  void opts;
+  const timeout = opts.timeoutMs ?? 60000;
+  const start = Date.now();
+  const sleep = opts.sleep ?? (async (ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+
+  while (Date.now() - start < timeout) {
+    const { state, retryAfter } = await getMediaState(accessToken, publicProfileId, mediaId);
+    if (state === "ready") return;
+    if (state === "failed") {
+      throw new SnapchatApiError("SNAPCHAT_MEDIA_PROCESSING_FAILED", "Media processing failed.");
+    }
+    await sleep((retryAfter || 5) * 1000);
+  }
+  throw new SnapchatApiError("SNAPCHAT_MEDIA_PROCESSING_FAILED", "Media processing timed out.");
 }
 
 export type ContentCreation = {
