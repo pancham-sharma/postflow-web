@@ -316,11 +316,35 @@ export async function createOAuthState(input: OAuthStateInput) {
     .eq("workspace_id", input.workspaceId)
     .eq("user_id", input.userId)
     .maybeSingle();
-  if (membershipError) throw membershipError;
+  if (membershipError) {
+    logSupabaseOAuthError({
+      operation: "oauth_state_workspace_membership_select",
+      table: "workspace_members",
+      provider: input.platform,
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+      error: membershipError,
+    });
+    throw membershipError;
+  }
   if (!membership) throw new Error("The authenticated user is not a member of this workspace.");
 
   // Drop states that already expired so the table stays tidy.
-  await supabase.from("oauth_states").delete().lt("expires_at", new Date().toISOString());
+  const { error: cleanupError } = await supabase
+    .from("oauth_states")
+    .delete()
+    .lt("expires_at", new Date().toISOString());
+  if (cleanupError) {
+    logSupabaseOAuthError({
+      operation: "oauth_state_expired_cleanup_delete",
+      table: "oauth_states",
+      provider: input.platform,
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+      error: cleanupError,
+    });
+    throw cleanupError;
+  }
 
   const hash = hashOAuthState(input.state);
   console.info("[OAUTH_STATE_INSERT]", {
@@ -387,11 +411,33 @@ export async function consumeOAuthState(
     )
     .eq("state_hash", hash)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    logSupabaseOAuthError({
+      operation: "oauth_state_select",
+      table: "oauth_states",
+      provider: platform,
+      error,
+    });
+    throw error;
+  }
   if (!data || data.platform !== platform) return { ok: false, reason: "state_invalid" };
   if (data.consumed_at) return { ok: false, reason: "state_reused" };
   if (new Date(data.expires_at).getTime() < Date.now()) {
-    await supabase.from("oauth_states").delete().eq("state_hash", hash);
+    const { error: expiredDeleteError } = await supabase
+      .from("oauth_states")
+      .delete()
+      .eq("state_hash", hash);
+    if (expiredDeleteError) {
+      logSupabaseOAuthError({
+        operation: "oauth_state_expired_delete",
+        table: "oauth_states",
+        provider: platform,
+        userId: data.user_id,
+        workspaceId: data.workspace_id,
+        error: expiredDeleteError,
+      });
+      throw expiredDeleteError;
+    }
     return { ok: false, reason: "state_expired" };
   }
 
@@ -406,7 +452,17 @@ export async function consumeOAuthState(
       .eq("workspace_id", data.workspace_id)
       .eq("user_id", data.user_id)
       .maybeSingle();
-    if (membershipError) throw membershipError;
+    if (membershipError) {
+      logSupabaseOAuthError({
+        operation: "oauth_state_callback_membership_select",
+        table: "workspace_members",
+        provider: platform,
+        userId: data.user_id,
+        workspaceId: data.workspace_id,
+        error: membershipError,
+      });
+      throw membershipError;
+    }
     if (!membership) return { ok: false, reason: "state_invalid" };
   }
 
@@ -417,14 +473,34 @@ export async function consumeOAuthState(
     .is("consumed_at", null)
     .select("state")
     .maybeSingle();
-  if (claimError) throw claimError;
+  if (claimError) {
+    logSupabaseOAuthError({
+      operation: "oauth_state_claim_update",
+      table: "oauth_states",
+      provider: platform,
+      userId: data.user_id,
+      workspaceId: data.workspace_id,
+      error: claimError,
+    });
+    throw claimError;
+  }
   if (!claimed) return { ok: false, reason: "state_reused" };
 
   const { error: deleteError } = await supabase
     .from("oauth_states")
     .delete()
     .eq("state_hash", hash);
-  if (deleteError) throw deleteError;
+  if (deleteError) {
+    logSupabaseOAuthError({
+      operation: "oauth_state_consumed_delete",
+      table: "oauth_states",
+      provider: platform,
+      userId: data.user_id,
+      workspaceId: data.workspace_id,
+      error: deleteError,
+    });
+    throw deleteError;
+  }
 
   return {
     ok: true,
@@ -458,7 +534,15 @@ export async function peekOAuthState(
     .select("platform, code_verifier, return_path, expires_at, consumed_at")
     .eq("state_hash", hash)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    logSupabaseOAuthError({
+      operation: "oauth_state_peek_select",
+      table: "oauth_states",
+      provider: platform,
+      error,
+    });
+    throw error;
+  }
   if (!data || data.platform !== platform) return { ok: false, reason: "state_invalid" };
   if (data.consumed_at) return { ok: false, reason: "state_reused" };
   if (new Date(data.expires_at).getTime() < Date.now()) {

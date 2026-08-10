@@ -9,6 +9,22 @@ function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
 }
 
+function serviceRoleKeyType(value: string): "secret" | "service_role" | "invalid" {
+  if (value.startsWith("sb_secret_")) return "secret";
+  if (value.startsWith("sb_publishable_")) return "invalid";
+
+  const [, payload] = value.split(".");
+  if (!payload) return "invalid";
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      role?: string;
+    };
+    return decoded.role === "service_role" ? "service_role" : "invalid";
+  } catch {
+    return "invalid";
+  }
+}
+
 function createSupabaseFetch(supabaseKey: string): typeof fetch {
   return (input, init) => {
     const headers = new Headers(
@@ -19,12 +35,12 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
       new Headers(init.headers).forEach((value, key) => headers.set(key, value));
     }
 
-    // New Supabase API keys are opaque strings, not bearer JWTs.
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
+    // The server admin client must never forward a user's JWT. Use only the
+    // backend credential selected below.
+    if (isNewSupabaseApiKey(supabaseKey)) {
       headers.delete("Authorization");
+    } else {
+      headers.set("Authorization", `Bearer ${supabaseKey}`);
     }
 
     headers.set("apikey", supabaseKey);
@@ -34,34 +50,34 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 
 function createSupabaseAdminClient() {
   const SUPABASE_URL = process.env["SUPABASE_URL"];
-  const configuredKeys = [process.env["SUPABASE_SECRET_KEY"], process.env["SUPABASE_SERVICE_ROLE_KEY"]]
-    .map((value) => (value ?? "").trim())
-    .filter(Boolean);
-  // Prefer an actual privileged key. This avoids accidentally selecting a
-  // stale publishable value when Render has both variables configured.
-  const SUPABASE_PRIVILEGED_KEY = configuredKeys.find((value) => !value.startsWith("sb_publishable_")) ?? "";
-
-  if (!SUPABASE_URL || !SUPABASE_PRIVILEGED_KEY) {
-    const missing = [
-      ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
-      ...(!SUPABASE_PRIVILEGED_KEY ? ["SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY)"] : []),
-    ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud.`;
-    console.error(`[Supabase] ${message}`);
-    throw new Error(message);
-  }
-
-  if (SUPABASE_PRIVILEGED_KEY.startsWith("sb_publishable_")) {
-    throw new Error(
-      "SUPABASE_SECRET_KEY must be a privileged server key, not the browser publishable key.",
-    );
-  }
+  const SUPABASE_SERVICE_ROLE_KEY = (process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "").trim();
+  const SUPABASE_SECRET_KEY = (process.env["SUPABASE_SECRET_KEY"] ?? "").trim();
+  const configuredKeys = [SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SECRET_KEY].filter(Boolean);
+  const SUPABASE_PRIVILEGED_KEY =
+    configuredKeys.find((value) => serviceRoleKeyType(value) !== "invalid") ?? "";
+  const privilegedKeyType = SUPABASE_PRIVILEGED_KEY
+    ? serviceRoleKeyType(SUPABASE_PRIVILEGED_KEY)
+    : "invalid";
 
   console.info("[SUPABASE_SERVER_CONFIG]", {
-    supabase_url_configured: true,
-    privileged_key_configured: true,
-    privileged_key_type: SUPABASE_PRIVILEGED_KEY.startsWith("sb_secret_") ? "secret" : "service_role",
+    supabase_url_configured: Boolean(SUPABASE_URL),
+    supabase_service_role_key_configured: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+    supabase_secret_key_configured: Boolean(SUPABASE_SECRET_KEY),
+    privileged_key_configured: Boolean(SUPABASE_PRIVILEGED_KEY),
+    privileged_key_type: privilegedKeyType,
   });
+
+  if (!SUPABASE_URL || !SUPABASE_PRIVILEGED_KEY || privilegedKeyType === "invalid") {
+    const message = "Server Supabase admin credentials are not configured";
+    console.error("[Supabase]", {
+      message,
+      supabase_url_configured: Boolean(SUPABASE_URL),
+      supabase_service_role_key_configured: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+      supabase_secret_key_configured: Boolean(SUPABASE_SECRET_KEY),
+      privileged_key_configured: Boolean(SUPABASE_PRIVILEGED_KEY),
+    });
+    throw new Error(message);
+  }
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PRIVILEGED_KEY, {
     global: {
