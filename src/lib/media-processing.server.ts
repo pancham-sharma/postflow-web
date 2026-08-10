@@ -1,5 +1,8 @@
+import { MEDIA_BUCKET } from "@/lib/media-library";
+
+export { MEDIA_BUCKET };
+
 // Media access for provider ingestion: short-lived signed URLs only.
-export const MEDIA_BUCKET = "post-media";
 
 /** Providers pull assets over HTTPS, so we hand them a time-limited signed URL. */
 export async function signedMediaUrl(path: string, expiresInSeconds = 3600): Promise<string | null> {
@@ -31,7 +34,7 @@ export function isAllowedMimeType(mimeType: string): boolean {
 /** Rejects path traversal and non-workspace-owned upload paths. */
 export function isSafeStoragePath(path: string, userId: string): boolean {
   if (path.includes("..") || path.startsWith("/")) return false;
-  return path.startsWith(`${userId}/`);
+  return path.startsWith(`users/${userId}/`) || path.startsWith(`${userId}/`);
 }
 
 /**

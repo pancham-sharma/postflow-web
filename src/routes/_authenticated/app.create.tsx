@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Check, FolderOpen, Info, Loader2, TriangleAlert, Upload, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getDashboardData } from "@/lib/dashboard.functions";
+import { preflightMediaUpload } from "@/lib/media.functions";
 import { createAndQueuePost, dispatchPublishingJob } from "@/lib/publishing.functions";
 import {
   DEFAULT_YOUTUBE_OPTIONS,
@@ -66,7 +67,7 @@ import {
 } from "@/lib/platform-content";
 import { generatePlatformContent } from "@/lib/ai-content.functions";
 import { generateSourceIdeaForPlatform } from "@/lib/source-idea.functions";
-import { formatBytes, validateFile } from "@/lib/media-library";
+import { MEDIA_BUCKET, createUserPostStoragePath, formatBytes, validateFile } from "@/lib/media-library";
 import {
   applyGeneratedContent,
   cardHasContent,
@@ -97,6 +98,7 @@ function CreatePost() {
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const fetchDashboard = useServerFn(getDashboardData);
+  const preflightUpload = useServerFn(preflightMediaUpload);
   const submitPost = useServerFn(createAndQueuePost);
   const dispatchPost = useServerFn(dispatchPublishingJob);
   const generateContent = useServerFn(generatePlatformContent);
@@ -520,9 +522,16 @@ function CreatePost() {
     const { data: userData } = await supabase.auth.getUser();
     const uid = userData.user?.id;
     if (!uid) throw new Error("Your session expired — sign in again.");
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${uid}/${Date.now()}-${safeName}`;
-    const { error } = await supabase.storage.from("post-media").upload(path, file, {
+    await preflightUpload({
+      data: {
+        fileName: file.name,
+        mimeType: file.type as never,
+        fileSize: file.size,
+        checksum: null,
+      },
+    });
+    const path = createUserPostStoragePath(uid, file.name);
+    const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
       cacheControl: "3600",
       upsert: false,
       contentType: file.type || "application/octet-stream",
@@ -530,7 +539,7 @@ function CreatePost() {
     if (error) {
       if (/maximum allowed size/i.test(error.message)) {
         throw new Error(
-          `This file is ${formatBytes(file.size)}. The post-media storage limit is 512 MiB.`,
+          "Media storage is not configured for a file of this size yet. Please try again after the storage update has been deployed.",
         );
       }
       throw error;
@@ -611,11 +620,13 @@ function CreatePost() {
     }
 
     setPublishing(mode);
+    let uploadedMediaPath: string | null = null;
     try {
       let mediaPath: string | null = null;
       if (file) {
         setUploading(true);
         mediaPath = await uploadMedia();
+        uploadedMediaPath = mediaPath;
         setUploading(false);
       }
 
@@ -683,6 +694,7 @@ function CreatePost() {
         queryClient.invalidateQueries({ queryKey: postKeys.calendar() }),
       ]);
       await navigate({ to: "/app/posts" });
+      uploadedMediaPath = null;
       if (mode === "now" && queued > 0) {
         void dispatchPost({ data: { jobId: result.jobId } }).catch((error: unknown) => {
           toast.error(error instanceof Error ? error.message : "Publishing could not be started.");
@@ -690,6 +702,9 @@ function CreatePost() {
       }
     } catch (error) {
       setUploading(false);
+      if (uploadedMediaPath) {
+        await supabase.storage.from(MEDIA_BUCKET).remove([uploadedMediaPath]);
+      }
       toast.error(error instanceof Error ? error.message : "Could not create the post.");
     } finally {
       setPublishing(null);
@@ -737,7 +752,7 @@ function CreatePost() {
           >
             <Upload className="size-6" aria-hidden />
             <p className="text-sm font-medium">Drag and drop a file</p>
-            <p className="text-xs text-muted-foreground">JPG, PNG, WebP, MP4, MOV — up to 500 MB</p>
+            <p className="text-xs text-muted-foreground">JPG, PNG, WebP, MP4, MOV — up to 512 MiB</p>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button
                 type="button"

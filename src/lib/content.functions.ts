@@ -215,7 +215,35 @@ export const deletePost = createServerFn({ method: "POST" })
       throw new Error("Only drafts, cancelled or failed posts can be deleted.");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { MEDIA_BUCKET } = await import("@/lib/media-library");
+    const { data: mediaRows, error: mediaReadError } = await supabaseAdmin
+      .from("social_post_media")
+      .select("storage_path")
+      .eq("post_id", data.postId);
+    if (mediaReadError) throw mediaReadError;
+
     const { error } = await supabaseAdmin.from("social_posts").delete().eq("id", data.postId);
     if (error) throw error;
+
+    const paths = [...new Set((mediaRows ?? []).map((row) => row.storage_path).filter(Boolean))];
+    const removable: string[] = [];
+    for (const path of paths) {
+      const [postRefs, libraryRefs] = await Promise.all([
+        supabaseAdmin
+          .from("social_post_media")
+          .select("id", { count: "exact", head: true })
+          .eq("storage_path", path),
+        supabaseAdmin
+          .from("media_assets")
+          .select("id", { count: "exact", head: true })
+          .eq("storage_path", path),
+      ]);
+      if (postRefs.error) throw postRefs.error;
+      if (libraryRefs.error) throw libraryRefs.error;
+      if ((postRefs.count ?? 0) === 0 && (libraryRefs.count ?? 0) === 0) removable.push(path);
+    }
+    if (removable.length > 0) {
+      await supabaseAdmin.storage.from(MEDIA_BUCKET).remove(removable);
+    }
     return { ok: true };
   });

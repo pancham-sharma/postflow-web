@@ -1,5 +1,14 @@
 // Client-safe media library types and helpers.
-export const MEDIA_BUCKET = "post-media";
+const mediaEnv = import.meta.env as Record<string, string | undefined>;
+const runtimeEnv =
+  typeof process !== "undefined"
+    ? (process.env as Record<string, string | undefined>)
+    : {};
+export const MEDIA_BUCKET =
+  mediaEnv["VITE_SUPABASE_STORAGE_BUCKET"] ||
+  mediaEnv["SUPABASE_STORAGE_BUCKET"] ||
+  runtimeEnv["SUPABASE_STORAGE_BUCKET"] ||
+  "post-media";
 
 export const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 512 * 1024 * 1024;
@@ -104,6 +113,13 @@ export function validateFile(file: File): { kind: MediaKind } | { error: string 
 
 export function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-180) || "upload";
+}
+
+export function createUserPostStoragePath(userId: string, fileName: string): string {
+  const safeName = sanitizeFileName(fileName);
+  const postScope = crypto.randomUUID();
+  const objectId = crypto.randomUUID();
+  return `users/${userId}/posts/${postScope}/${objectId}-${safeName}`;
 }
 
 /** Reads intrinsic dimensions/duration in the browser so the record is accurate. */

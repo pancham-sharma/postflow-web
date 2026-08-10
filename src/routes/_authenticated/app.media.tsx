@@ -22,6 +22,7 @@ import {
   deleteMediaFolder,
   getMediaLibrary,
   getMediaSignedUrl,
+  preflightMediaUpload,
   purgeMediaAssets,
   registerMediaAsset,
   renameMediaFolder,
@@ -31,11 +32,11 @@ import {
 import {
   MEDIA_BUCKET,
   aspectLabel,
+  createUserPostStoragePath,
   fileChecksum,
   formatBytes,
   formatDuration,
   probeMedia,
-  sanitizeFileName,
   validateFile,
   type MediaAsset,
 } from "@/lib/media-library";
@@ -78,6 +79,7 @@ type UploadTask = {
 function MediaLibraryPage() {
   const queryClient = useQueryClient();
   const fetchLibrary = useServerFn(getMediaLibrary);
+  const preflightUpload = useServerFn(preflightMediaUpload);
   const register = useServerFn(registerMediaAsset);
   const updateAsset = useServerFn(updateMediaAsset);
   const trashAsset = useServerFn(setMediaTrashed);
@@ -164,10 +166,21 @@ function MediaLibraryPage() {
     const patch = (next: Partial<UploadTask>) =>
       setUploads((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...next } : t)));
 
+    let uploadedPath: string | null = null;
     try {
       const [meta, checksum] = await Promise.all([probeMedia(file, check.kind), fileChecksum(file)]);
       patch({ progress: 25 });
-      const path = `${uid}/${Date.now()}-${sanitizeFileName(file.name)}`;
+      await preflightUpload({
+        data: {
+          fileName: file.name,
+          mimeType: file.type as never,
+          fileSize: file.size,
+          checksum,
+        },
+      });
+      patch({ progress: 35 });
+      const path = createUserPostStoragePath(uid, file.name);
+      uploadedPath = path;
       const upload = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
         cacheControl: "3600",
         upsert: false,
@@ -201,6 +214,9 @@ function MediaLibraryPage() {
       invalidate();
       setTimeout(() => setUploads((prev) => prev.filter((t) => t.id !== taskId)), 2500);
     } catch (error) {
+      if (uploadedPath) {
+        await supabase.storage.from(MEDIA_BUCKET).remove([uploadedPath]);
+      }
       patch({
         status: "error",
         message: error instanceof Error ? error.message : "Upload failed.",

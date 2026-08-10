@@ -67,6 +67,7 @@ export async function buildDashboardSummary(
     unhealthyRes,
     mediaRes,
     sizesRes,
+    postMediaSizesRes,
     limitRes,
     totalRes,
     draftRes,
@@ -96,9 +97,14 @@ export async function buildDashboardSummary(
       .is("deleted_at", null),
     supabase
       .from("media_assets")
-      .select("file_size")
+      .select("storage_path, file_size")
       .eq("workspace_id", workspaceId)
       .is("deleted_at", null)
+      .limit(5000),
+    supabase
+      .from("social_post_media")
+      .select("storage_path, file_size")
+      .eq("workspace_id", workspaceId)
       .limit(5000),
     supabase
       .from("workspace_storage")
@@ -138,10 +144,12 @@ export async function buildDashboardSummary(
   const attentionPosts = new Set<string>();
   for (const row of destAttentionRes.data ?? []) attentionPosts.add(row.post_id);
 
-  const storageUsedBytes = (sizesRes.data ?? []).reduce(
-    (sum, row) => sum + safe(Number(row.file_size)),
-    0,
-  );
+  const usedByPath = new Map<string, number>();
+  for (const row of sizesRes.data ?? []) usedByPath.set(row.storage_path, safe(Number(row.file_size)));
+  for (const row of postMediaSizesRes.data ?? []) {
+    if (!usedByPath.has(row.storage_path)) usedByPath.set(row.storage_path, safe(Number(row.file_size)));
+  }
+  const storageUsedBytes = [...usedByPath.values()].reduce((sum, size) => sum + size, 0);
 
   return {
     connectedAccounts: safe(accountsRes.count),

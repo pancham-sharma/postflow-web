@@ -252,6 +252,21 @@ confirm no new color literals were introduced.
 
 ## 9. Change log
 
+- **Oversized publish payload fix** — media files are validated before upload,
+  publish requests keep media references/metadata instead of raw bytes, audio
+  settings are compacted before job creation, and safe diagnostics log request
+  size, media size, MIME type, media ID, platform and stage without logging file
+  contents or secrets.
+- **AI provider fallback hardening** — AI writing now uses one server-only
+  provider chain with Gemini first when configured, then OpenAI, OpenRouter and
+  Lovable AI Gateway. Duplicate generation requests are guarded, and quota,
+  rate-limit and provider failures return safe user-facing messages.
+- **Portable Render/Vite build configuration** — project-root-based paths are
+  used for the Lovable MCP routes directory so Windows local builds and
+  Linux/Render builds resolve `src/routes` inside the project root.
+- **OAuth redirect hardening** — `POSTFLOW_APP_URL` is the canonical app origin
+  for production redirects, while local development keeps using the local dev
+  server origin.
 - **README expanded** — full route map, database/table reference, AI model list,
   every secret name, and a deleted/replaced log (sections 10–14).
 - **AI error transparency** — gateway 402/429 responses now surface the real
@@ -430,6 +445,28 @@ workspace- or user-scoped policies.
 destinations, run retries with backoff (1, 5, 15, 60, 360 min) and recover
 stuck rows.
 
+### Media upload and publish payloads
+
+Media files are uploaded through the existing storage-backed media flow and are
+not embedded as base64 strings or raw `File`/`Blob` objects inside normal JSON
+publish requests. Post creation and publish jobs store only references and
+metadata such as media ID, storage path, public/signed URL reference, MIME type,
+size, width, height and duration.
+
+Publish job payloads stay small and platform-neutral:
+
+```json
+{
+  "postId": "post-id",
+  "platforms": ["instagram", "facebook", "snapchat"],
+  "mediaIds": ["media-id"]
+}
+```
+
+Each platform publisher retrieves the media reference it needs when processing
+its destination. Diagnostic logs intentionally include only request size, media
+size, MIME type, media ID, platform and endpoint/stage.
+
 ### Migrations
 
 `supabase/migrations/` holds the full history: the initial social-connection and
@@ -477,7 +514,14 @@ Stored as backend secrets and read inside server handlers only.
 | `OPENROUTER_API_KEY`                    | OpenRouter AI-writing fallback (server-only)                                                  |
 | `OPENROUTER_MODEL`                      | Optional OpenRouter model; defaults to `openai/gpt-4o-mini`                                    |
 | `LOVABLE_API_KEY`                       | Lovable AI Gateway (managed; rotate from Lovable, not in code)                                 |
+| `SUPABASE_URL`                          | Server-side Supabase project URL                                                               |
 | `SUPABASE_SECRET_KEY`                   | Privileged PostFlow server operations (server-only; legacy alias: `SUPABASE_SERVICE_ROLE_KEY`) |
+| `SUPABASE_SERVICE_ROLE_KEY`             | Legacy privileged Supabase server key alias; never expose to browser code                      |
+| `SUPABASE_STORAGE_BUCKET`               | Server/runtime storage bucket name; defaults to `post-media`                                  |
+| `VITE_SUPABASE_STORAGE_BUCKET`          | Optional public browser bucket-name override; defaults to `post-media`                        |
+| `VITE_SUPABASE_URL`                     | Public Supabase project URL used by browser code                                               |
+| `VITE_SUPABASE_PUBLISHABLE_KEY`         | Public Supabase publishable key used by browser code                                           |
+| `VITE_SUPABASE_PROJECT_ID`              | Public Supabase project identifier used by browser code                                        |
 | `YOUTUBE_OAUTH_CLIENT_ID`               | YouTube publishing OAuth                                                                       |
 | `YOUTUBE_OAUTH_CLIENT_SECRET`           | YouTube publishing OAuth                                                                       |
 | `YOUTUBE_REDIRECT_URI`                  | Exact YouTube OAuth callback URL                                                               |
@@ -504,8 +548,9 @@ Pinterest OAuth credentials (`PINTEREST_OAUTH_CLIENT_ID` /
 `PINTEREST_OAUTH_CLIENT_SECRET`) are **not configured yet** — Pinterest connect
 stays disabled until they are added.
 
-Public browser values (safe in code): `VITE_SUPABASE_URL`,
-`VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID`.
+Do not commit `.env`, `.env.local`, `.env.example`, production env dumps,
+provider client secrets, API keys, access tokens, refresh tokens, encryption
+keys, private storage URLs or copied provider dashboard screenshots.
 
 Google sign-in is configured in **Supabase Dashboard -> Authentication ->
 Providers -> Google** with a Google OAuth Web Client ID and Client Secret. Those

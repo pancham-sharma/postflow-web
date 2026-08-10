@@ -7,6 +7,7 @@ import {
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
   MEDIA_BUCKET,
+  formatBytes,
   type MediaAsset,
   type MediaFolder,
   type StorageUsage,
@@ -88,7 +89,10 @@ export const getMediaLibrary = createServerFn({ method: "GET" })
         .select("storage_limit_bytes")
         .eq("workspace_id", workspaceId)
         .maybeSingle(),
-      supabase.from("social_post_media").select("storage_path").eq("workspace_id", workspaceId),
+      supabase
+        .from("social_post_media")
+        .select("storage_path, media_type, mime_type, file_size")
+        .eq("workspace_id", workspaceId),
     ]);
     if (foldersRes.error) throw foldersRes.error;
     if (assetsRes.error) throw assetsRes.error;
@@ -107,14 +111,31 @@ export const getMediaLibrary = createServerFn({ method: "GET" })
     }
 
     const live = assets.filter((a) => !a.deletedAt);
+    const storedObjects = new Map<string, { fileSize: number; mediaType: string; deleted: boolean }>();
+    for (const asset of live) {
+      storedObjects.set(asset.storagePath, {
+        fileSize: asset.fileSize,
+        mediaType: asset.mediaType,
+        deleted: false,
+      });
+    }
+    for (const row of postMediaRes.data ?? []) {
+      if (!row.storage_path || storedObjects.has(row.storage_path)) continue;
+      storedObjects.set(row.storage_path, {
+        fileSize: Number(row.file_size ?? 0),
+        mediaType: row.media_type || (String(row.mime_type ?? "").startsWith("video/") ? "video" : "image"),
+        deleted: false,
+      });
+    }
+    const stored = [...storedObjects.values()].filter((item) => !item.deleted);
     const storage: StorageUsage = {
       limitBytes: Number(limitRes.data?.storage_limit_bytes ?? 10737418240),
-      usedBytes: live.reduce((sum, a) => sum + a.fileSize, 0),
-      imageBytes: live.filter((a) => a.mediaType === "image").reduce((s, a) => s + a.fileSize, 0),
-      videoBytes: live.filter((a) => a.mediaType === "video").reduce((s, a) => s + a.fileSize, 0),
+      usedBytes: stored.reduce((sum, a) => sum + a.fileSize, 0),
+      imageBytes: stored.filter((a) => a.mediaType === "image").reduce((s, a) => s + a.fileSize, 0),
+      videoBytes: stored.filter((a) => a.mediaType === "video").reduce((s, a) => s + a.fileSize, 0),
       otherBytes: 0,
       trashBytes: assets.filter((a) => a.deletedAt).reduce((s, a) => s + a.fileSize, 0),
-      fileCount: live.length,
+      fileCount: stored.length,
     };
     storage.otherBytes = Math.max(0, storage.usedBytes - storage.imageBytes - storage.videoBytes);
 
@@ -144,6 +165,73 @@ const registerInput = z.object({
   altText: z.string().trim().max(500).default(""),
 });
 
+const uploadPreflightInput = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  mimeType: z.enum(ALL_MIME),
+  fileSize: z.number().int().positive(),
+  checksum: z.string().trim().max(128).nullable().default(null),
+});
+
+export type MediaUploadPreflight = {
+  ok: true;
+  storage: Pick<StorageUsage, "limitBytes" | "usedBytes"> & { remainingBytes: number };
+};
+
+export const preflightMediaUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => uploadPreflightInput.parse(data))
+  .handler(async ({ data, context }): Promise<MediaUploadPreflight> => {
+    const { resolveWorkspaceId } = await import("@/lib/social-connections.server");
+    const workspaceId = await resolveWorkspaceId(context.userId);
+    const kind = (ALLOWED_VIDEO_MIME as readonly string[]).includes(data.mimeType)
+      ? "video"
+      : "image";
+    const max = kind === "image" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+    if (data.fileSize > max) {
+      throw new Error(`${data.fileName} is too large. The ${kind} upload limit is ${formatBytes(max)}.`);
+    }
+
+    const { supabase } = context;
+    const [limitRow, existing, postMedia] = await Promise.all([
+      supabase
+        .from("workspace_storage")
+        .select("storage_limit_bytes")
+        .eq("workspace_id", workspaceId)
+        .maybeSingle(),
+      supabase
+        .from("media_assets")
+        .select("storage_path, file_size, checksum, file_name")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null),
+      supabase
+        .from("social_post_media")
+        .select("storage_path, file_size")
+        .eq("workspace_id", workspaceId),
+    ]);
+    if (existing.error) throw existing.error;
+    if (postMedia.error) throw postMedia.error;
+
+    const usedByPath = new Map<string, number>();
+    for (const row of existing.data ?? []) usedByPath.set(row.storage_path, Number(row.file_size ?? 0));
+    for (const row of postMedia.data ?? []) {
+      if (!usedByPath.has(row.storage_path)) usedByPath.set(row.storage_path, Number(row.file_size ?? 0));
+    }
+    const usedBytes = [...usedByPath.values()].reduce((sum, size) => sum + size, 0);
+    const limitBytes = Number(limitRow.data?.storage_limit_bytes ?? 10737418240);
+    const remainingBytes = Math.max(0, limitBytes - usedBytes);
+    if (data.fileSize > remainingBytes) {
+      throw new Error(
+        `Not enough storage left. ${formatBytes(remainingBytes)} available, ${formatBytes(data.fileSize)} selected.`,
+      );
+    }
+    if (data.checksum) {
+      const dupe = (existing.data ?? []).find((r) => r.checksum === data.checksum);
+      if (dupe) throw new Error(`This file is already in your library as "${dupe.file_name}".`);
+    }
+
+    return { ok: true, storage: { limitBytes, usedBytes, remainingBytes } };
+  });
+
 /** Records an uploaded object as a library asset after server-side validation. */
 export const registerMediaAsset = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -159,7 +247,9 @@ export const registerMediaAsset = createServerFn({ method: "POST" })
     const max = kind === "image" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
     if (data.fileSize > max) throw new Error("This file is larger than the allowed size.");
     // Never trust a client path: it must live under this user's own prefix.
-    if (!data.storagePath.startsWith(`${userId}/`) || data.storagePath.includes("..")) {
+    const ownsPath =
+      data.storagePath.startsWith(`users/${userId}/`) || data.storagePath.startsWith(`${userId}/`);
+    if (!ownsPath || data.storagePath.includes("..") || data.storagePath.startsWith("/")) {
       throw new Error("Invalid upload path.");
     }
 
@@ -175,19 +265,31 @@ export const registerMediaAsset = createServerFn({ method: "POST" })
     }
 
 
-    const limitRow = await supabase
-      .from("workspace_storage")
-      .select("storage_limit_bytes")
-      .eq("workspace_id", workspaceId)
-      .maybeSingle();
-    const existing = await supabase
-      .from("media_assets")
-      .select("file_size, checksum, file_name")
-      .eq("workspace_id", workspaceId)
-      .is("deleted_at", null);
+    const [limitRow, existing, postMedia] = await Promise.all([
+      supabase
+        .from("workspace_storage")
+        .select("storage_limit_bytes")
+        .eq("workspace_id", workspaceId)
+        .maybeSingle(),
+      supabase
+        .from("media_assets")
+        .select("storage_path, file_size, checksum, file_name")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null),
+      supabase
+        .from("social_post_media")
+        .select("storage_path, file_size")
+        .eq("workspace_id", workspaceId),
+    ]);
     if (existing.error) throw existing.error;
+    if (postMedia.error) throw postMedia.error;
 
-    const used = (existing.data ?? []).reduce((s, r) => s + Number(r.file_size ?? 0), 0);
+    const usedByPath = new Map<string, number>();
+    for (const row of existing.data ?? []) usedByPath.set(row.storage_path, Number(row.file_size ?? 0));
+    for (const row of postMedia.data ?? []) {
+      if (!usedByPath.has(row.storage_path)) usedByPath.set(row.storage_path, Number(row.file_size ?? 0));
+    }
+    const used = [...usedByPath.values()].reduce((sum, size) => sum + size, 0);
     const limit = Number(limitRow.data?.storage_limit_bytes ?? 10737418240);
     if (used + data.fileSize > limit) {
       throw new Error("Not enough storage left. Free up space and try again.");
