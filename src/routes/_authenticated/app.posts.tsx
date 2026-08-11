@@ -419,9 +419,23 @@ const PostRow = memo(function PostRow({
           >
             <span className="font-semibold capitalize">{d.platform}</span>
             {d.accountLabel && <span className="text-muted-foreground">{d.accountLabel}</span>}
-            <span className="ml-auto rounded-full border border-primary/40 px-2 py-0.5 font-semibold">
-              {DESTINATION_STATUS_LABEL[d.status] ?? d.status}
-            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="rounded-full border border-primary/40 px-2 py-0.5 font-semibold">
+                {DESTINATION_STATUS_LABEL[d.status] ?? d.status}
+              </span>
+              {!["published", "cancelled"].includes(d.status) && !["failed", "reconnect_required", "retry_scheduled", "rate_limited"].includes(d.status) && (
+                <button
+                  type="button"
+                  onClick={() => onRetry(d.id)}
+                  disabled={retryingId === d.id}
+                  className="rounded-md border border-primary/50 px-2 py-0.5 font-semibold hover:bg-accent disabled:opacity-60"
+                  title="Force retry this platform"
+                >
+                  <RotateCcw className="size-3 inline-block mr-1" aria-hidden />
+                  {retryingId === d.id ? "Retrying…" : "Retry"}
+                </button>
+              )}
+            </div>
             {d.providerPostUrl && (
               <a
                 href={d.providerPostUrl}

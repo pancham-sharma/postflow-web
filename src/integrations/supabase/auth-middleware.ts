@@ -53,7 +53,7 @@ function createSupabaseFetch(supabaseKey: string, timeoutMs = 10_000, userToken?
   };
 }
 
-type VerifiedUser = { id: string; email?: string };
+type VerifiedUser = { id: string; email: string | undefined };
 const validationsInFlight = new Map<string, Promise<VerifiedUser>>();
 
 function cleanEnv(name: string): string {
@@ -90,7 +90,8 @@ async function verifyToken(
 
   validationsInFlight.set(fingerprint, pending);
   try {
-    return await pending;
+    const result = await pending;
+    return result as VerifiedUser;
   } finally {
     validationsInFlight.delete(fingerprint);
   }

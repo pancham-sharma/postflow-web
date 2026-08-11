@@ -77,6 +77,8 @@ type ProviderJson = {
   id?: string | number;
   user_id?: string | number;
   username?: string;
+  name?: string;
+  url?: string;
   account_type?: string;
   profile_picture_url?: string;
   business_name?: string;
@@ -497,7 +499,7 @@ export async function refreshTokens(
       `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(accessToken)}`,
     );
     return {
-      accessToken: data.access_token,
+      accessToken: data.access_token ?? accessToken,
       refreshToken: null,
       expiresInSeconds: Number(data.expires_in ?? 0) || null,
       scopes: config.scopes,
@@ -510,7 +512,7 @@ export async function refreshTokens(
       `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}&fb_exchange_token=${encodeURIComponent(accessToken)}`,
     );
     return {
-      accessToken: data.access_token,
+      accessToken: data.access_token ?? accessToken,
       refreshToken: null,
       expiresInSeconds: Number(data.expires_in ?? 0) || null,
       scopes: config.scopes,

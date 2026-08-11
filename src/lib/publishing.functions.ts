@@ -269,8 +269,8 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
           media: {
             mediaType: mediaTypeStr as "image" | "video" | "none",
             mimeType: mediaMimeType,
-            mediaSize: mediaSize,
-            mediaDuration: mediaDuration,
+            fileSize: mediaSize,
+            durationSeconds: mediaDuration,
             hasLink: !!data.linkUrl,
             aspectRatio: mediaAspectRatio,
           },
@@ -675,7 +675,7 @@ export const retryDestination = createServerFn({ method: "POST" })
         max_attempts: maxAttempts,
       })
       .eq("id", existing.id)
-      .in("status", ["failed", "retry_scheduled", "rate_limited", "reconnect_required"])
+      .in("status", ["failed", "retry_scheduled", "rate_limited", "reconnect_required", "processing", "uploading", "validating", "queued", "pending"])
       .select("id")
       .maybeSingle();
     if (error) throw error;
