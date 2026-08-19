@@ -9,6 +9,7 @@ import {
   passwordProblem,
 } from "@/lib/auth-policy";
 import { authUserMessage, logAuthFailure } from "@/lib/supabase-auth-errors";
+import logoUrl from "@/assets/logo.png";
 
 
 export const Route = createFileRoute("/register")({
@@ -79,11 +80,8 @@ function RegisterPage() {
   return (
     <div className="mesh-vanilla flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-md rounded-3xl border border-border bg-background p-8 shadow-lift">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="grid size-9 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-            PF
-          </span>
-          <span className="text-lg font-semibold">PostFlow</span>
+        <Link to="/" className="flex items-center">
+          <img src={logoUrl} alt="PostFlow Logo" className="h-10 w-auto rounded-lg object-contain" />
         </Link>
 
         {sent ? (

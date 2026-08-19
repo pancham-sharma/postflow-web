@@ -23,6 +23,7 @@ import { withAuthRecovery } from "@/lib/unauthorized";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyRoles } from "@/lib/admin.functions";
 import type { AppRole } from "@/lib/admin-types";
+import logoUrl from "@/assets/logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { listNotifications } from "@/lib/notifications.functions";
@@ -346,11 +347,8 @@ function AppLayout() {
   return (
     <div className="flex min-h-dvh w-full bg-background">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-4 bg-sidebar p-5 lg:flex">
-        <Link to="/app" className="flex shrink-0 items-center gap-2 text-sidebar-foreground">
-          <span className="grid size-9 place-items-center rounded-lg bg-sidebar-primary text-sm font-bold text-sidebar-primary-foreground">
-            PF
-          </span>
-          <span className="text-lg font-semibold">PostFlow</span>
+        <Link to="/app" className="flex shrink-0 items-center text-sidebar-foreground">
+          <img src={logoUrl} alt="PostFlow Logo" className="h-16 w-auto rounded-xl object-contain" />
         </Link>
         <div className="min-h-0 flex-1 overflow-y-auto pt-3">
           <NavList />

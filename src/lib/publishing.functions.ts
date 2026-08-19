@@ -271,7 +271,6 @@ export const createAndQueuePost = createServerFn({ method: "POST" })
             mimeType: mediaMimeType,
             fileSize: mediaSize,
             durationSeconds: mediaDuration,
-            hasLink: !!data.linkUrl,
             aspectRatio: mediaAspectRatio,
           },
         },

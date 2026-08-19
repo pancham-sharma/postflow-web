@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import logoUrl from "@/assets/logo.png";
 
 type AuthorizationDetails = {
   client?: { name?: string | null } | null;
@@ -85,9 +86,7 @@ function Consent() {
   return (
     <main className="mesh-vanilla grid min-h-screen place-items-center px-4 py-12">
       <div className="w-full max-w-md rounded-3xl border border-border bg-background p-8 shadow-lift">
-        <span className="grid size-9 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-          PF
-        </span>
+        <img src={logoUrl} alt="PostFlow Logo" className="h-10 w-auto rounded-lg object-contain" />
         <h1 className="mt-6 text-2xl font-bold">Connect {clientName} to PostFlow</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {clientName} will be able to read your connected accounts and publishing jobs, queue new

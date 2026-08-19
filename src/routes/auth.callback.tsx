@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { verifyAuthenticatedSessionWithFallback } from "@/lib/auth-session";
 import { peekNext, takeNext, startGoogleSignIn, clearNext } from "@/lib/auth-next";
 import { authUserMessage, logAuthFailure } from "@/lib/supabase-auth-errors";
+import logoUrl from "@/assets/logo.png";
 
 export const Route = createFileRoute("/auth/callback")({
   // The Supabase session lives in localStorage, so this page is browser-only.
@@ -98,9 +99,7 @@ function GoogleCallback() {
   return (
     <main className="mesh-vanilla grid min-h-screen place-items-center px-4 py-12">
       <div className="w-full max-w-md rounded-3xl border border-border bg-background p-8 shadow-lift">
-        <span className="grid size-9 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-          PF
-        </span>
+        <img src={logoUrl} alt="PostFlow Logo" className="h-10 w-auto rounded-lg object-contain" />
 
         {busy && (
           <>

@@ -20,6 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 import { platforms } from "@/lib/postflow-data";
+import logoUrl from "@/assets/logo.png";
 
 const heroReels = [
   { src: "/landing-videos/side-hustle-ideas.mp4", label: "Side hustle ideas" },
@@ -188,11 +189,8 @@ function Header() {
           scrolled ? "bg-background/95 shadow-soft" : "bg-transparent"
         }`}
       >
-        <Link to="/" className="flex items-center gap-2">
-          <span className="grid size-9 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-            PF
-          </span>
-          <span className="text-lg font-semibold">PostFlow</span>
+        <Link to="/" className="flex items-center">
+          <img src={logoUrl} alt="PostFlow Logo" className="h-10 w-auto rounded-lg object-contain" />
         </Link>
         <nav className="hidden items-center gap-7 text-sm font-medium md:flex">
           <a href="#features" className="hover:opacity-70">
@@ -300,7 +298,7 @@ function HeroMock() {
             <video
               ref={videoRef}
               className="mesh-vanilla aspect-[9/16] w-full bg-primary/10 object-cover"
-              src={heroReels[reelIndex].src}
+              src={heroReels[reelIndex]?.src}
               poster={heroPoster.url}
               autoPlay
               muted
@@ -313,7 +311,7 @@ function HeroMock() {
               disablePictureInPicture
               disableRemotePlayback
               controlsList="nodownload noplaybackrate noremoteplayback"
-              aria-label={`${heroReels[reelIndex].label}, sample vertical reel published with PostFlow`}
+              aria-label={`${heroReels[reelIndex]?.label}, sample vertical reel published with PostFlow`}
             />
             <span className="absolute left-2 top-2 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
               9:16
@@ -551,11 +549,8 @@ function Landing() {
       <footer className="surface-strong px-4 py-14">
         <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="grid size-9 place-items-center rounded-lg bg-primary-foreground text-sm font-bold text-primary">
-                PF
-              </span>
-              <span className="text-lg font-semibold">PostFlow</span>
+            <div className="flex items-center">
+              <img src={logoUrl} alt="PostFlow Logo" className="h-10 w-auto rounded-lg object-contain" />
             </div>
             <p className="mt-3 max-w-xs text-sm opacity-80">
               One publishing workspace for creators, small businesses and agencies.

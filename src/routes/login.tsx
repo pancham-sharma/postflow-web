@@ -6,6 +6,7 @@ import { startGoogleSignIn, rememberNext, takeNext } from "@/lib/auth-next";
 import { verifyAuthenticatedSessionWithFallback } from "@/lib/auth-session";
 import { normalizeEmail } from "@/lib/auth-policy";
 import { authUserMessage, logAuthFailure } from "@/lib/supabase-auth-errors";
+import logoUrl from "@/assets/logo.png";
 
 
 
@@ -188,11 +189,8 @@ function LoginPage() {
   return (
     <div className="mesh-vanilla flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-md rounded-3xl border border-border bg-background p-8 shadow-lift">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="grid size-9 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-            PF
-          </span>
-          <span className="text-lg font-semibold">PostFlow</span>
+        <Link to="/" className="flex items-center">
+          <img src={logoUrl} alt="PostFlow Logo" className="h-10 w-auto rounded-lg object-contain" />
         </Link>
         <h1 className="mt-7 text-2xl font-bold">Welcome back</h1>
         <p className="mt-1 text-sm text-muted-foreground">Log in to your publishing workspace.</p>

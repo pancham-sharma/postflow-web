@@ -81,8 +81,8 @@ import {
 import { ReplaceContentDialog, type ConflictTarget } from "@/components/composer/replace-content-dialog";
 
 export const Route = createFileRoute("/_authenticated/app/create")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    reuse: typeof search['reuse'] === "string" ? search['reuse'] : undefined,
+  validateSearch: (search: Record<string, unknown>): { reuse?: string } => ({
+    ...(typeof search['reuse'] === "string" ? { reuse: search['reuse'] } : {}),
   }),
   head: () => ({
     meta: [
